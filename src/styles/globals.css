@@ -1,0 +1,152 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+/* No dark mode (SPEC §1.2). Kept so 8bitcn's `dark:` classes only apply under a
+   `.dark` class that is never set, instead of following the OS setting. */
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  /* Wanderdex tokens (SPEC §16.2) */
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-dark: var(--surface-dark);
+  --color-text: var(--text);
+  --color-primary: var(--primary);
+  --color-accent: var(--accent);
+  --color-success: var(--success);
+  --color-error: var(--error);
+  --color-warning: var(--warning);
+  --color-map-ocean: var(--map-ocean);
+  --color-map-land: var(--map-land);
+  --color-map-border: var(--map-border);
+  --color-visited: var(--visited);
+  --color-on-primary: var(--on-primary);
+
+  /* shadcn names, mapped onto the tokens in :root */
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* Fonts (SPEC §16.4). Variables come from next/font in src/app/layout.tsx. */
+  --font-display: var(--font-press-start);
+  --font-body: var(--font-vt323);
+  --font-heading: var(--font-press-start);
+
+  /* Type scale (SPEC §16.4) */
+  --text-h1: 32px;
+  --text-h1--line-height: 1.5;
+  --text-h2: 24px;
+  --text-h2--line-height: 1.5;
+  --text-h3: 16px;
+  --text-h3--line-height: 1.5;
+  --text-button: 16px;
+  --text-button--line-height: 1.5;
+  --text-body: 20px;
+  --text-body--line-height: 1.2;
+  --text-small: 18px;
+  --text-small--line-height: 1.2;
+  --text-tiny: 16px;
+  --text-tiny--line-height: 1.2;
+
+  /* Solid offset shadow (SPEC §16.5) */
+  --shadow-pixel: 4px 4px 0 var(--text);
+  /* Same shadow as a filter, so it follows 8bitcn's notched pixel borders */
+  --drop-shadow-pixel: 4px 4px 0 var(--text);
+
+  /* Square corners everywhere */
+  --radius-xs: var(--radius);
+  --radius-sm: var(--radius);
+  --radius-md: var(--radius);
+  --radius-lg: var(--radius);
+  --radius-xl: var(--radius);
+  --radius-2xl: var(--radius);
+  --radius-3xl: var(--radius);
+  --radius-4xl: var(--radius);
+}
+
+:root {
+  /* The only place colors are defined (SPEC §16.2) */
+  --background: #f2ebd0;
+  --surface: #e7d8b7;
+  --surface-dark: #c9b995;
+  --text: #2d201c;
+  --primary: #c84f3d;
+  --accent: #e57a2e;
+  --success: #4caf68;
+  --error: #d65465;
+  --warning: #f9cb77;
+  --map-ocean: #3e7774;
+  --map-land: #8daa63;
+  --map-border: #6b6a5b;
+  --visited: #f5a830;
+  --on-primary: #f2ebd0;
+
+  --foreground: var(--text);
+  --card: var(--surface);
+  --card-foreground: var(--text);
+  --popover: var(--surface);
+  --popover-foreground: var(--text);
+  --primary-foreground: var(--on-primary);
+  --secondary: var(--surface);
+  --secondary-foreground: var(--text);
+  --muted: var(--surface-dark);
+  --muted-foreground: var(--text);
+  --accent-foreground: var(--text);
+  --destructive: var(--error);
+  --border: var(--text);
+  --input: var(--text);
+  --ring: var(--accent);
+  --radius: 0;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background font-body text-body text-text;
+  }
+  h1 {
+    @apply font-display text-h1;
+  }
+  h2 {
+    @apply font-display text-h2;
+  }
+  h3 {
+    @apply font-display text-h3;
+  }
+}
+
+@utility pixelated {
+  image-rendering: pixelated;
+}
+
+/* Pixel-style focus outline. Unlayered so it wins over `outline-none` utilities. */
+:focus-visible {
+  outline: 4px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

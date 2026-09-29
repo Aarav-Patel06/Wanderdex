@@ -1,0 +1,7 @@
+/* Press Start 2P is loaded with next/font in src/app/layout.tsx (SPEC §4).
+   `.pixelated` lives in src/styles/globals.css. */
+.retro {
+  font-family: var(--font-press-start), system-ui, -apple-system, sans-serif;
+  line-height: 1.5;
+  letter-spacing: 0.5px;
+}
