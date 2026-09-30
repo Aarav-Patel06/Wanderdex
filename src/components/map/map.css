@@ -2,7 +2,7 @@
    these win at equal specificity. Colors are palette tokens only (SPEC §16.2). */
 
 /* Pixel effect (SPEC §13.1): the canvas is drawn at a low pixelRatio and scaled up crisply. */
-.maplibregl-canvas {
+[data-pixelated] .maplibregl-canvas {
   image-rendering: pixelated;
 }
 

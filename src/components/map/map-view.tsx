@@ -22,12 +22,31 @@ import { Button } from "@/components/ui/8bit/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/8bit/card";
 import { type Category, CATEGORY_LABELS, categorySprite } from "@/lib/categories";
 import { clusterLabel, type MapPlace, type NewPin } from "@/lib/map/places";
-import { BASE_STYLE_URL, pixelStyle } from "@/lib/map/style";
+import { BASE_STYLE_URL, mapPixelRatio, type MapToken, pixelStyle, type RoadDetail } from "@/lib/map/style";
 
 import "./map.css";
 
-// One fixed, low pixel ratio for the pixel look (SPEC §13.1). Tuned on real phones in Phase 3.
-const MAP_PIXEL_RATIO = 0.5;
+// The pixel look (SPEC §13.1): one map pixel is about this many CSS pixels, rounded to whole
+// device pixels (mapPixelRatio). Being tuned on real phones (SPEC §24).
+const MAP_BLOCK = 2;
+const ROADS: RoadDetail = "major";
+
+type MapSettings = { block: number; roads: RoadDetail; pixelated: boolean };
+
+// TEMPORARY comparison switches for tuning on real phones, development builds only:
+// ?block=2|3|4 (map pixel size), ?roads=major|all, ?pixel=off (Plan B, SPEC §13.5: no
+// pixelation, normal pixelRatio). To be removed once the settings are picked.
+function mapSettings(): MapSettings {
+  const settings: MapSettings = { block: MAP_BLOCK, roads: ROADS, pixelated: true };
+  if (process.env.NODE_ENV !== "development") return settings;
+  const params = new URLSearchParams(window.location.search);
+  const block = params.get("block");
+  if (block === "2" || block === "3" || block === "4") settings.block = Number(block);
+  const roads = params.get("roads");
+  if (roads === "major" || roads === "all") settings.roads = roads;
+  if (params.get("pixel") === "off") settings.pixelated = false;
+  return settings;
+}
 
 const START_MAX_ZOOM = 12;
 const FIT_PADDING = 64;
@@ -41,7 +60,9 @@ const CLUSTER_RADIUS_PX = 40;
 // Pans to a new pin at least this close, so it shows as a pin rather than inside a cluster.
 const FOCUS_ZOOM = 12;
 
-// The selected pin is 64px tall and anchored at its bottom tip; the popup sits clear of it.
+// The selected pin is 64px tall and anchored at its bottom tip. The card sits above it
+// (bottom anchors, 72px up clears the pin plus the card's 4px shadow), or below the tip when
+// there's no room above. POPUP_PADDING rules out the side anchors.
 const POPUP_OFFSET: Offset = {
   center: [0, -32],
   top: [0, 8],
@@ -53,6 +74,11 @@ const POPUP_OFFSET: Offset = {
   left: [36, -32],
   right: [-36, -32],
 };
+// MapLibre's auto-anchor puts the card beside the pin ("left"/"right", centered on it) when the
+// pin is near a side edge, which on a phone is most of the screen, and the card then covers the
+// pin's edge. An endless bottom padding makes "doesn't fit below" always true, so the card goes
+// above the pin unless it doesn't fit there either (then below). Only the corners and top/bottom remain.
+const POPUP_PADDING = { bottom: Infinity };
 
 type PinProps = { id: string; name: string; category: Category };
 
@@ -68,6 +94,7 @@ export function MapView({ places, focus }: { places: MapPlace[]; focus: NewPin |
   const [popupNode] = useState(() => document.createElement("div"));
   // Only the places at first render decide the start view (SPEC §13.1).
   const [startBounds] = useState(() => startBoundsOf(places));
+  const [settings] = useState(mapSettings);
 
   const index = useMemo(() => {
     const index = new Supercluster<PinProps>({ radius: CLUSTER_RADIUS_PX });
@@ -86,6 +113,8 @@ export function MapView({ places, focus }: { places: MapPlace[]; focus: NewPin |
   useEffect(() => {
     let cancelled = false;
     let created: MapLibreMap | undefined;
+    let dprQuery: MediaQueryList | undefined;
+    let onDprChange: (() => void) | undefined;
     fetch(BASE_STYLE_URL)
       .then((res) => {
         if (!res.ok) throw new Error(`style request failed (${res.status})`);
@@ -94,10 +123,21 @@ export function MapView({ places, focus }: { places: MapPlace[]; focus: NewPin |
       .then((base) => {
         if (cancelled || !containerRef.current) return;
         const css = getComputedStyle(document.documentElement);
+        const color = (token: MapToken) => css.getPropertyValue(token).trim();
+        // Both depend on the device pixel ratio, which changes when the window moves to
+        // another monitor or the page is zoomed. Line widths are whole map pixels in both modes.
+        const pixelRatio = () =>
+          settings.pixelated ? mapPixelRatio(devicePixelRatio, settings.block) : devicePixelRatio;
+        const style = () =>
+          pixelStyle(base, color, {
+            mapPx: 1 / mapPixelRatio(devicePixelRatio, settings.block),
+            roads: settings.roads,
+          });
+
         created = new MapLibreMap({
           container: containerRef.current,
-          style: pixelStyle(base, (token) => css.getPropertyValue(token).trim()),
-          pixelRatio: MAP_PIXEL_RATIO,
+          style: style(),
+          pixelRatio: pixelRatio(),
           bounds: startBounds,
           fitBoundsOptions: { padding: FIT_PADDING, maxZoom: START_MAX_ZOOM },
           minZoom: MIN_ZOOM,
@@ -109,14 +149,30 @@ export function MapView({ places, focus }: { places: MapPlace[]; focus: NewPin |
         });
         created.touchZoomRotate.disableRotation();
         created.keyboard.disableRotation();
+
+        // MapLibre doesn't watch for this itself. The query matches only the current ratio,
+        // so it fires once on any change and is then replaced.
+        const map = created;
+        const update = () => {
+          map.setPixelRatio(pixelRatio());
+          map.setStyle(style());
+          watch();
+        };
+        const watch = () => {
+          dprQuery = matchMedia(`(resolution: ${devicePixelRatio}dppx)`);
+          dprQuery.addEventListener("change", update, { once: true });
+        };
+        onDprChange = update;
+        watch();
         setMap(created);
       })
       .catch((error) => console.error("Overworld map failed to load:", error));
     return () => {
       cancelled = true;
+      if (onDprChange) dprQuery?.removeEventListener("change", onDprChange);
       created?.remove();
     };
-  }, [startBounds]);
+  }, [startBounds, settings]);
 
   // HTML markers only, never symbol layers: the canvas is pixelated, markers stay crisp (SPEC §13.4).
   // Recomputed on moveend, which zooming fires too, and only for what's in view.
@@ -172,7 +228,13 @@ export function MapView({ places, focus }: { places: MapPlace[]; focus: NewPin |
 
   useEffect(() => {
     if (!map || !selected) return;
-    const popup = new Popup({ closeButton: false, offset: POPUP_OFFSET, maxWidth: "none", className: "pin-popup" })
+    const popup = new Popup({
+      closeButton: false,
+      offset: POPUP_OFFSET,
+      padding: POPUP_PADDING,
+      maxWidth: "none",
+      className: "pin-popup",
+    })
       .setLngLat([selected.lng, selected.lat])
       .setDOMContent(popupNode)
       .addTo(map);
@@ -200,7 +262,7 @@ export function MapView({ places, focus }: { places: MapPlace[]; focus: NewPin |
 
   return (
     <div className="absolute inset-0">
-      <div ref={containerRef} className="size-full" />
+      <div ref={containerRef} data-pixelated={settings.pixelated ? "" : undefined} className="size-full" />
 
       {/* Mobile: below the avatar menu button (top-right, 44px + shadow). Desktop: top-right. */}
       <div className="absolute top-[calc(4.75rem+env(safe-area-inset-top))] right-[calc(1.25rem+env(safe-area-inset-right))] flex flex-col gap-4 md:top-[calc(1rem+env(safe-area-inset-top))]">
