@@ -7,21 +7,24 @@ import { cn } from "@/lib/utils";
 
 import "@/components/ui/8bit/styles/retro.css";
 
+const pressed = "drop-shadow-pixel active:translate-x-1 active:translate-y-1 active:drop-shadow-none";
+
 export const buttonVariants = cva("", {
   variants: {
     font: {
       normal: "",
       retro: "retro",
     },
-    // Layered over the base shadcn variants (SPEC §16.6).
+    // Layered over the base shadcn variants (SPEC §16.6). Press = pushed flat into the
+    // page: move by the full 4px shadow offset and drop the shadow. Instant, no easing.
     variant: {
-      default: "drop-shadow-pixel",
-      destructive: "drop-shadow-pixel",
-      outline: "drop-shadow-pixel",
-      secondary: "drop-shadow-pixel hover:bg-surface-dark",
+      default: pressed,
+      destructive: pressed,
+      outline: pressed,
+      secondary: `${pressed} hover:bg-surface-dark`,
       // SPEC §16.3: accent text fails contrast, so ghost = text color + accent underline.
       ghost:
-        "text-text underline decoration-accent decoration-4 underline-offset-4 hover:bg-transparent aria-expanded:bg-transparent",
+        "text-text underline decoration-accent decoration-4 underline-offset-4 hover:bg-transparent aria-expanded:bg-transparent active:translate-y-0.5",
       link: "",
     },
     size: {
@@ -112,7 +115,7 @@ function Button({
     <ShadcnButton
       {...props}
       className={cn(
-        "rounded-none active:translate-y-1 transition-transform relative inline-flex items-center justify-center gap-1.5 border-none min-h-11 px-4 text-button",
+        "rounded-none transition-none relative inline-flex items-center justify-center gap-1.5 border-none min-h-11 px-4 text-button",
         buttonVariants({ variant }),
         size === "icon" && "mx-1 my-0 size-11 px-0",
         font !== "normal" && "retro",

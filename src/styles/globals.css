@@ -60,6 +60,9 @@
   --text-small--line-height: 1.2;
   --text-tiny: 16px;
   --text-tiny--line-height: 1.2;
+  /* Mobile tab bar labels only (SPEC §14.1) */
+  --text-tab: 8px;
+  --text-tab--line-height: 1.5;
 
   /* Solid offset shadow (SPEC §16.5) */
   --shadow-pixel: 4px 4px 0 var(--text);
@@ -115,6 +118,10 @@
 @layer base {
   * {
     @apply border-border;
+  }
+  html {
+    /* No grey flash on tap (iOS/Android); components show their own :active state. */
+    -webkit-tap-highlight-color: transparent;
   }
   body {
     @apply bg-background font-body text-body text-text;
