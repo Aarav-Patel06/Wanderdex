@@ -10,6 +10,7 @@
 - **Ask first** before: changing anything the spec marks as decided, adding a dependency not listed in SPEC §4, or adding a paid service.
 - Package manager: **pnpm only** (`pnpm add`, `pnpm dlx`). No npm/yarn lockfiles.
 - Commands in docs must work in **PowerShell** (Windows PowerShell 5.1: no `&&`, use `;` or `if ($?) { }`).
+- The owner applies migrations by hand in the Supabase SQL Editor. Whenever you create a migration, stop, give the file name, and wait for confirmation that it's applied. Same for any Supabase or Google dashboard setting.
 - **No secrets committed.** `.env*` is git-ignored; `.env.example` lists names only. Secret keys stay server-side, never `NEXT_PUBLIC_`.
 - Colors come only from the tokens in `src/styles/globals.css`. Fonts: Press Start 2P (headings, buttons) and VT323 (body).
 - 8bitcn components: `pnpm dlx shadcn@latest add @8bitcn/<name>`. After adding any shadcn or 8bitcn component:

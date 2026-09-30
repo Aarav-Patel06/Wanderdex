@@ -34,6 +34,8 @@ export async function proxy(request: NextRequest) {
   const loggedIn = Boolean(data?.claims);
   const onAuthPage = AUTH_PAGES.includes(request.nextUrl.pathname);
 
+  // API routes check the session themselves and answer with a JSON error, not a redirect.
+  if (request.nextUrl.pathname.startsWith("/api/")) return response;
   if (!loggedIn && !onAuthPage) return redirect(request, response, "/login");
   if (loggedIn && onAuthPage) return redirect(request, response, "/");
   return response;

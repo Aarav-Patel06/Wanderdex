@@ -92,7 +92,7 @@ Storing Google Places data (names, coordinates, addresses, types) in our own dat
 | Base components | **shadcn/ui** | Foundation for 8bitcn |
 | 8-bit components | **8bitcn** | Installed directly from its registry with the shadcn CLI, e.g. `pnpm dlx shadcn@latest add @8bitcn/button`. The 21st.dev copy limit doesn't apply this way. |
 | UI icons | **Pixelarticons** | Fork/knife, star, calendar, bell, warning, etc. |
-| Fonts | **Press Start 2P** (headings, buttons), **VT323** (body) | Loaded with `next/font/google` |
+| Fonts | **Press Start 2P** (headings, buttons), **VT323** (body) | Loaded with `next/font/local` from font files committed to the repo (from Google Fonts, with their SIL OFL licenses) |
 | Toasts | Sonner via shadcn/8bitcn toast | Restyled to tokens |
 | Mobile drawer | shadcn **Drawer** (Vaul) | The slide-up panel on mobile |
 | Map | **MapLibre GL JS** | Low `pixelRatio` + CSS pixelated scaling |
@@ -289,7 +289,7 @@ Enable RLS on every table.
 
 | Table | Rule |
 |---|---|
-| `profiles` | A user can read and update only their own row. Username checks for signup happen on the server. |
+| `profiles` | A user can read only their own row. All writes happen on the server. |
 | `places` | Logged-in users can read rows where `google_place_id is not null`, **or** where `created_by = auth.uid()` (manual places are private to their creator). **No insert/update from the browser**; the server inserts with the secret key. |
 | `visits` | A user can select, insert, update, and delete only rows where `user_id = auth.uid()`. |
 | `resolve_log` | No browser access. Server only. |
@@ -319,15 +319,16 @@ The add panel has **three separate modes** (as in the design sheet): **Paste Lin
 ### 11.1 Paste Link (server: `/api/resolve/link`)
 1. Validate that the input is a supported URL:
    - Google: `maps.app.goo.gl/…`, `goo.gl/maps/…`, `google.<tld>/maps/…`, `maps.google.<tld>/…`
-   - Apple: `maps.apple.com/…`
+   - Apple: `maps.apple.com/…`, and the newer short links `maps.apple/…` (e.g. `maps.apple/p/…`)
    - Anything else → "That doesn't look like a Maps link."
-2. **Expand short links** by following redirects on the server (cap at ~5 redirects, ~5 s timeout).
+2. **Expand short links** by following redirects on the server (cap at ~5 redirects, ~5 s timeout). Every hop must stay on one of the hosts above.
 3. **Parse** the final URL. Handle these known forms, with unit tests using real sample URLs:
    - Google `/maps/place/<name>/@<lat>,<lng>,<zoom>z/…` → name + coordinates
    - Google `/maps/search/<query>/@<lat>,<lng>…` → query + coordinates
    - Google `?q=<text or lat,lng>` / `?query=…` → query or coordinates
    - Google `!3d<lat>!4d<lng>` inside the `data=` part → more precise coordinates than `@`
    - Apple `q=` (name), `ll=` (lat,lng), `address=`, and newer forms with `name=` and `coordinate=`
+   - Apple `maps.apple.com/place?place-id=…` (where `maps.apple/p/…` links land), which has no name or coordinates in the URL: fetch that page (no redirects, ~5 s timeout, first ~512 KB only) and read only its `og:title` (minus any "Apple Maps" suffix) and `place:location:latitude` / `place:location:longitude` meta tags. Coordinates must be valid numbers in range. If any tag is missing or invalid, it's a parse failure (step 6).
    - Decode `+` and percent-encoding in names.
 4. **Look up:** Google Text Search with the name (or query), plus a ~500 m location bias circle if coordinates exist. If only coordinates exist, use Nearby Search (§11.2 step 4).
 5. Return up to 3 candidates. Keep the original link as `source_input`.
@@ -651,9 +652,10 @@ Toasts auto-dismiss after ~4 s and have a close (×) button. Copy is in §11.6 a
 
 ## 17. Security and cost controls
 - Secret keys only in server code and Vercel env vars. Never prefixed `NEXT_PUBLIC_`.
-- **Google Cloud, day one:** API key restricted to Places API (New) only; a **budget alert** (e.g. $5) on the billing account; **daily quota caps** on Text Search and Nearby Search (e.g. 300/day each). Google requires a card on file, which is why these matter.
+- **Google Cloud, day one:** API key restricted to Places API (New) only; a **budget alert** (e.g. $5) on the billing account; **daily quota caps** on Text Search and Nearby Search (e.g. 150/day each: `SearchTextRequest` and `SearchNearbyRequest`). Google requires a card on file, which is why these matter. While the billing account is on the Free Trial, the Places API (New) quota settings are locked; set the caps when upgrading (see `DECISIONS.md`).
 - Field masks limited as in §12.1.
 - **Per-user rate limit** on `/api/resolve/*`: log each call in `resolve_log`; reject above **60/hour or 300/day** per user (adjustable).
+- **Global monthly cap per Google SKU** (Phase 2, with the per-user limit): about **4,500 calls/month** each for Text Search and Nearby Search, counting actual Google API calls across all users (a Nearby retry at 150 m counts as two calls). When a cap is hit, lookups return the rate-limit error. `resolve_log` counts lookups per user, not Google calls per SKU, so this likely needs a small migration.
 - All route handlers check the Supabase session and validate input with zod.
 - RLS on every table (§9).
 - Photos never leave the browser.
@@ -709,7 +711,7 @@ The owner is in a rush. Target roughly **two weeks** for the core build; these a
 - Visited-country fill.
 - Manual pin fallback.
 - Toasts: new place + first country.
-- Per-user rate limiting.
+- Per-user rate limiting and the global monthly Google caps (§17).
 - **Done when:** every feature in §3 works end to end and the unit tests in §19 pass.
 
 ### Phase 3: Polish (≈ days 11–14)
@@ -733,6 +735,7 @@ Passport stamps · stats page · timeline replay · saving photos to entries · 
 |---|---|
 | Google terms gray area (storing Places data) | Accepted for a personal project; revisit before any public launch |
 | Google/Apple change link formats | Parser isolated in `lib/links`, unit tested, graceful fallback to Type Location |
+| Apple changes its place page or objects to reading it (§11.1) | Falls back to Type Location; accepted for a personal project |
 | Photos often lack GPS | Clear "no location data" path; the date is still used |
 | Supabase free project pausing | Keep-alive ping every ~3 days |
 | Gemini free-tier limits change | Fall back to raw-text search; Claude Haiku as backup provider |
@@ -759,5 +762,4 @@ Passport stamps · stats page · timeline replay · saving photos to entries · 
 
 ## 24. Open items
 - Exact `pixelRatio` value (tune in Phase 3).
-- Placeholder email domain accepted by Supabase (§10).
 - Final Vercel subdomain (`wanderdex.vercel.app` if available).

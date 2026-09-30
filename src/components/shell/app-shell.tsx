@@ -88,7 +88,8 @@ export function AppShell({ username, children }: { username: string; children: R
         </div>
       </aside>
 
-      <main className="relative min-h-0 flex-1 overflow-y-auto">
+      {/* Mobile: bottom padding = the fixed tab bar (4rem tabs + safe-area inset), so nothing hides behind it. */}
+      <main className="relative min-h-0 flex-1 overflow-y-auto pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0">
         {children}
 
         {pathname === "/" && (
@@ -96,7 +97,7 @@ export function AppShell({ username, children }: { username: string; children: R
           <DropdownMenu modal={false}>
             <DropdownMenuTrigger
               aria-label={`${username} menu`}
-              className="absolute top-4 right-4 shadow-pixel md:hidden"
+              className="absolute top-[calc(1rem+env(safe-area-inset-top))] right-4 shadow-pixel md:hidden"
             >
               <UserInitial initial={initial} />
             </DropdownMenuTrigger>
@@ -110,7 +111,11 @@ export function AppShell({ username, children }: { username: string; children: R
         )}
       </main>
 
-      <nav aria-label="Main" className="grid shrink-0 grid-cols-3 bg-text text-background md:hidden">
+      {/* The dark fill runs under the home indicator and Safari's toolbar; the padding keeps the tabs clear of them. */}
+      <nav
+        aria-label="Main"
+        className="fixed inset-x-0 bottom-0 grid grid-cols-3 bg-text pb-[env(safe-area-inset-bottom)] text-background md:hidden"
+      >
         {NAV_LINKS.map(({ href, label, Icon }) => (
           <Link
             key={href}
@@ -148,6 +153,7 @@ export function AppShell({ username, children }: { username: string; children: R
 }
 
 // Active tab = accent (5.4:1 on the dark bar). Cream on primary is only OK at 16px+ (SPEC §16.3).
+// min-h-16 must match the 4rem bottom padding on <main>.
 const tabItem = "flex min-h-16 flex-col items-center justify-center gap-1 border-t-4 font-display text-tab";
 
 // The user's initial in a pixel frame.
