@@ -1,0 +1,197 @@
+/* App shell (src/components/shell/app-shell.tsx): the desktop sidebar's RPG box and cursor,
+   the passport logo, and the mobile tab bar. Palette tokens only (SPEC §16.2); every size is
+   whole pixels; motion is steps() or instant, and reduced motion turns it off (SPEC §16.5). */
+
+/* The box: RPG dialog style with notched corners (6px accent border, clipped corners), and a
+   gold pixel in each inner corner. The offset shadow is a filter on the parent <aside>, so it
+   follows the notches. */
+.rpg-box {
+  clip-path: polygon(
+    6px 0,
+    calc(100% - 6px) 0,
+    calc(100% - 6px) 6px,
+    100% 6px,
+    100% calc(100% - 6px),
+    calc(100% - 6px) calc(100% - 6px),
+    calc(100% - 6px) 100%,
+    6px 100%,
+    6px calc(100% - 6px),
+    0 calc(100% - 6px),
+    0 6px,
+    6px 6px
+  );
+}
+.rpg-box-corner {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  background: var(--visited);
+}
+
+/* RPG cursor: "▶" beside the hovered item, else the keyboard-focused one, else the current
+   page's. It sits outside the item, on the dark box, where accent reads (5.4:1). */
+.nav-cursor {
+  visibility: hidden;
+}
+.nav-row:has(> .nav-item:hover) > .nav-cursor,
+.sidebar:not(:has(.nav-item:hover)) .nav-row:has(> .nav-item:focus-visible) > .nav-cursor,
+.sidebar:not(:has(.nav-item:hover, .nav-item:focus-visible))
+  .nav-row:has(> .nav-item[aria-current="page"])
+  > .nav-cursor {
+  visibility: visible;
+  animation: nav-cursor 0.8s steps(1) infinite;
+}
+/* Nudges right and back, like a menu cursor. */
+@keyframes nav-cursor {
+  50% {
+    translate: 2px 0;
+  }
+}
+
+/* Items: the current page's has the primary fill and rests raised on an accent shadow (the
+   text color wouldn't show on the dark box). Hover lifts an item 2px up-left onto a 6px
+   shadow, in two steps; press pushes it flat, by the full 4px shadow offset, instantly. */
+.nav-item {
+  transition:
+    translate 80ms steps(2),
+    box-shadow 80ms steps(2);
+}
+.nav-item[aria-current="page"] {
+  box-shadow: 4px 4px 0 var(--accent);
+}
+.nav-item:hover {
+  translate: -2px -2px;
+  box-shadow: 6px 6px 0 var(--accent);
+}
+.nav-item:active {
+  translate: 4px 4px;
+  box-shadow: none;
+  transition: none;
+}
+
+/* Add Visit's call to action on hover: a flat shine band steps across it and a pixel
+   sparkle twinkles at its right end. On click the + spins round in 45° steps. */
+.nav-add {
+  position: relative;
+  overflow: hidden;
+}
+.nav-add::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -8px;
+  width: 8px;
+  background: color-mix(in srgb, var(--background) 25%, transparent);
+  visibility: hidden;
+}
+.nav-add:hover::before {
+  visibility: visible;
+  animation: nav-shine 0.6s steps(8) both;
+}
+/* 8 steps of 32px, from just off the left edge to past the right one. */
+@keyframes nav-shine {
+  to {
+    translate: 256px 0;
+  }
+}
+.nav-add .sparkle {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  visibility: hidden;
+}
+.nav-add:hover .sparkle {
+  visibility: visible;
+  animation: sparkle 0.8s steps(1) infinite;
+}
+.nav-add[data-spin] .nav-add-icon {
+  animation: nav-spin 0.4s steps(8) both;
+}
+@keyframes nav-spin {
+  to {
+    rotate: 360deg;
+  }
+}
+
+/* A tiny pixel sparkle: a 2px center pixel plus four arms drawn with box-shadow. */
+.sparkle {
+  width: 2px;
+  height: 2px;
+  background: var(--background);
+  box-shadow:
+    0 -2px 0 var(--visited),
+    0 2px 0 var(--visited),
+    -2px 0 0 var(--visited),
+    2px 0 0 var(--visited);
+  pointer-events: none;
+}
+/* Twinkle: the arms grow to 4px, then shrink back. */
+@keyframes sparkle {
+  50% {
+    box-shadow:
+      0 -2px 0 var(--visited),
+      0 2px 0 var(--visited),
+      -2px 0 0 var(--visited),
+      2px 0 0 var(--visited),
+      0 -4px 0 var(--accent),
+      0 4px 0 var(--accent),
+      -4px 0 0 var(--accent),
+      4px 0 0 var(--accent);
+  }
+}
+
+/* Passport logo: hover bounces the sprite 4px (up, then a 2px settle, in steps) and shows a
+   sparkle at its top-right corner; press pushes the whole logo 4px down, instantly. */
+.logo .logo-sprite {
+  position: relative;
+}
+.logo:hover .logo-sprite {
+  animation: logo-bounce 0.4s steps(1) both;
+}
+@keyframes logo-bounce {
+  25% {
+    translate: 0 -4px;
+  }
+  50% {
+    translate: 0 -2px;
+  }
+  75% {
+    translate: 0 0;
+  }
+}
+.logo .sparkle {
+  position: absolute;
+  top: 2px;
+  right: 0;
+  visibility: hidden;
+}
+.logo:hover .sparkle {
+  visibility: visible;
+  animation: sparkle 0.8s steps(1) infinite;
+}
+.logo:active {
+  translate: 0 4px;
+}
+
+/* Mobile tabs: press pushes the tab's content 2px down (like the ghost button), instantly. */
+.tab-item:active > * {
+  translate: 0 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nav-cursor,
+  .nav-item,
+  .nav-add::before,
+  .nav-add .sparkle,
+  .nav-add .nav-add-icon,
+  .logo .logo-sprite,
+  .logo .sparkle {
+    animation: none !important;
+    transition: none;
+  }
+  /* The shine is pure motion; without it the sparkle still marks the hover. */
+  .nav-add:hover::before {
+    visibility: hidden;
+  }
+}

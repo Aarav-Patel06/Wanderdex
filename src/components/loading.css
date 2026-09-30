@@ -1,0 +1,27 @@
+/* Loading dots (src/components/loading.tsx). Press Start 2P is monospaced, so each dot is
+   1ch. The outer box always holds three dots, so nothing next to it shifts; the inner one
+   shows 1, 2, then 3 of them. */
+.loading-dots {
+  display: inline-block;
+  width: 3ch;
+}
+.loading-dots > span {
+  display: inline-block;
+  overflow: hidden;
+  vertical-align: bottom;
+  width: 3ch;
+  animation: loading-dots 1.2s steps(3, jump-none) infinite;
+}
+@keyframes loading-dots {
+  from {
+    width: 1ch;
+  }
+  to {
+    width: 3ch;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .loading-dots > span {
+    animation: none;
+  }
+}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import Image from "next/image";
@@ -14,13 +14,15 @@ import {
   Popup,
 } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
+import { InfoBox } from "pixelarticons/react/InfoBox";
 import { Minus } from "pixelarticons/react/Minus";
 import { Plus } from "pixelarticons/react/Plus";
 import Supercluster from "supercluster";
 
+import { Loading } from "@/components/loading";
 import { Button } from "@/components/ui/8bit/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/8bit/card";
-import { type Category, CATEGORY_LABELS, categorySprite } from "@/lib/categories";
+import { CATEGORIES, type Category, CATEGORY_LABELS, categorySprite } from "@/lib/categories";
 import { clusterLabel, type MapPlace, type NewPin } from "@/lib/map/places";
 import {
   BASE_STYLE_URL,
@@ -33,6 +35,7 @@ import {
   modePaints,
   pixelStyle,
 } from "@/lib/map/style";
+import { cn } from "@/lib/utils";
 
 import "./map.css";
 
@@ -53,25 +56,48 @@ const CLUSTER_RADIUS_PX = 40;
 // Pans to a new pin at least this close, so it shows as a pin rather than inside a cluster.
 const FOCUS_ZOOM = 12;
 
-// The selected pin is 64px tall and anchored at its bottom tip. The card sits above it
-// (bottom anchors, 72px up clears the pin plus the card's 4px shadow), or below the tip when
-// there's no room above. POPUP_PADDING rules out the side anchors.
-const POPUP_OFFSET: Offset = {
-  center: [0, -32],
-  top: [0, 8],
-  "top-left": [0, 8],
-  "top-right": [0, 8],
-  bottom: [0, -72],
-  "bottom-left": [0, -72],
-  "bottom-right": [0, -72],
-  left: [36, -32],
-  right: [-36, -32],
-};
+// Single pins double in size from this zoom up (SPEC §13.4; the sizes are in map.css).
+const NEAR_ZOOM = 14;
+
+// The popup card's pixel tail (map.css) reaches 18px past the card; 8px more leaves room for
+// its 4px shadow plus a gap before the pin. At a corner anchor, the card shifts so the pin is
+// TAIL_INSET px in from that corner, under the tail.
+const TAIL_REACH = 26;
+const TAIL_INSET = 30;
+
+// The selected pin is anchored at its bottom tip and is pinHeight tall (64px, or 96px when
+// near). The card sits above it (bottom anchors), or below the tip when there's no room above.
+// popupPadding rules out the side anchors.
+function popupOffset(pinHeight: number): Offset {
+  const above = -(pinHeight + TAIL_REACH);
+  return {
+    center: [0, -pinHeight / 2],
+    top: [0, TAIL_REACH],
+    "top-left": [-TAIL_INSET, TAIL_REACH],
+    "top-right": [TAIL_INSET, TAIL_REACH],
+    bottom: [0, above],
+    "bottom-left": [-TAIL_INSET, above],
+    "bottom-right": [TAIL_INSET, above],
+    left: [pinHeight / 2 + 4, -pinHeight / 2],
+    right: [-(pinHeight / 2 + 4), -pinHeight / 2],
+  };
+}
+
 // MapLibre's auto-anchor puts the card beside the pin ("left"/"right", centered on it) when the
 // pin is near a side edge, which on a phone is most of the screen, and the card then covers the
 // pin's edge. An endless bottom padding makes "doesn't fit below" always true, so the card goes
-// above the pin unless it doesn't fit there either (then below). Only the corners and top/bottom remain.
-const POPUP_PADDING = { bottom: Infinity };
+// above the pin unless it doesn't fit there either (then below). Only the corners and top/bottom
+// remain. The left padding keeps the card out from under the desktop sidebar.
+const popupPadding = (left: number) => ({ bottom: Infinity, left });
+
+// The desktop sidebar floats over the map's left edge (SPEC §14.1). This is how far it reaches
+// into the map; 0 on mobile, where it's display: none (an all-zero rect).
+function sidebarInset(container: HTMLElement) {
+  const sidebar = document.querySelector("[data-sidebar]");
+  if (!sidebar) return 0;
+  const inset = sidebar.getBoundingClientRect().right - container.getBoundingClientRect().left;
+  return Math.max(0, Math.round(inset));
+}
 
 type PinProps = { id: string; name: string; category: Category };
 
@@ -81,6 +107,10 @@ const pinKey = (id: string | null) => `p:${id}`;
 export function MapView({ places, focus }: { places: MapPlace[]; focus: NewPin | null }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [map, setMap] = useState<MapLibreMap | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  const [near, setNear] = useState(false);
+  const [legendOpen, setLegendOpen] = useState(false);
+  const legendId = useId();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selectedRef = useRef(selectedId);
   const markers = useRef(new Map<string, Marker>());
@@ -117,8 +147,6 @@ export function MapView({ places, focus }: { places: MapPlace[]; focus: NewPin |
         // The style comes after the start view is known, since the start zoom picks the mode.
         const map = new MapLibreMap({
           container: containerRef.current,
-          bounds: startBounds,
-          fitBoundsOptions: { padding: FIT_PADDING, maxZoom: START_MAX_ZOOM },
           // Set before the start view is fitted, so the fit can't zoom out past it.
           minZoom: minZoomFor(containerRef.current.clientWidth),
           attributionControl: { compact: false },
@@ -131,12 +159,24 @@ export function MapView({ places, focus }: { places: MapPlace[]; focus: NewPin |
         map.touchZoomRotate.disableRotation();
         map.keyboard.disableRotation();
 
+        // The camera's padding keeps the start view's fit, flyTo, and zooming centered in the
+        // part of the map the desktop sidebar doesn't cover. It's set before the fit, which adds
+        // FIT_PADDING on top of it. Duration 0 fits at once, as the constructor's bounds would.
+        map.setPadding({ top: 0, right: 0, bottom: 0, left: sidebarInset(containerRef.current) });
+        map.fitBounds(startBounds, { padding: FIT_PADDING, maxZoom: START_MAX_ZOOM, duration: 0 });
+        setNear(map.getZoom() >= NEAR_ZOOM);
+        map.on("zoom", () => setNear(map.getZoom() >= NEAR_ZOOM));
+        map.once("load", () => setLoaded(true));
+
         // Stop zooming out once the world is as wide as the map: further out, the pixels swallow
         // countries. MapLibre fires resize for container size changes, orientation changes
-        // included. setMinZoom zooms back in if the map is now below the new minimum.
+        // included. setMinZoom zooms back in if the map is now below the new minimum. The
+        // sidebar comes and goes at the desktop breakpoint, so the camera's inset follows it.
         map.on("resize", () => {
           const minZoom = minZoomFor(map.getContainer().clientWidth);
           if (map.getMinZoom() !== minZoom) map.setMinZoom(minZoom);
+          const left = sidebarInset(map.getContainer());
+          if (map.getPadding().left !== left) map.setPadding({ ...map.getPadding(), left });
         });
 
         let mode: MapMode = modeAt(map.getZoom(), SMOOTH_AT);
@@ -254,8 +294,8 @@ export function MapView({ places, focus }: { places: MapPlace[]; focus: NewPin |
     if (!map || !selected) return;
     const popup = new Popup({
       closeButton: false,
-      offset: POPUP_OFFSET,
-      padding: POPUP_PADDING,
+      offset: popupOffset(near ? 96 : 64),
+      padding: popupPadding(map.getPadding().left ?? 0),
       maxWidth: "none",
       className: "pin-popup",
     })
@@ -269,7 +309,7 @@ export function MapView({ places, focus }: { places: MapPlace[]; focus: NewPin |
       popup.off("close", onClose);
       popup.remove();
     };
-  }, [map, selected, popupNode]);
+  }, [map, selected, popupNode, near]);
 
   useEffect(() => {
     if (!map || !focus) return;
@@ -286,18 +326,38 @@ export function MapView({ places, focus }: { places: MapPlace[]; focus: NewPin |
 
   return (
     <div className="absolute inset-0">
-      {/* data-pixelated is set on it by the mode switch. */}
-      <div ref={containerRef} className="size-full" />
+      {/* data-pixelated is set on it by the mode switch; data-near grows the pins (map.css). */}
+      <div ref={containerRef} data-near={near || undefined} className="size-full" />
+
+      {/* Until the first full draw (same plate as the code-loading one in overworld.tsx). */}
+      {!loaded && (
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+          <Loading className="bg-text px-4 py-3 text-background" />
+        </div>
+      )}
 
       {/* Mobile: below the avatar menu button (top-right, 44px + shadow). Desktop: top-right. */}
-      <div className="absolute top-[calc(4.75rem+env(safe-area-inset-top))] right-[calc(1.25rem+env(safe-area-inset-right))] flex flex-col gap-4 md:top-[calc(1rem+env(safe-area-inset-top))]">
+      <div className={cn(CONTROLS_TOP, "absolute right-[calc(1.25rem+env(safe-area-inset-right))] flex flex-col gap-4")}>
         <Button variant="secondary" size="icon" aria-label="Zoom in" onClick={() => map?.zoomIn()} className="mx-0">
           <Plus aria-hidden="true" className="size-6" />
         </Button>
         <Button variant="secondary" size="icon" aria-label="Zoom out" onClick={() => map?.zoomOut()} className="mx-0">
           <Minus aria-hidden="true" className="size-6" />
         </Button>
+        <Button
+          variant="secondary"
+          size="icon"
+          aria-label="Map legend"
+          aria-expanded={legendOpen}
+          aria-controls={legendId}
+          onClick={() => setLegendOpen((open) => !open)}
+          className="mx-0"
+        >
+          <InfoBox aria-hidden="true" className="size-6" />
+        </Button>
       </div>
+
+      {legendOpen && <MapLegend id={legendId} />}
 
       {selected && createPortal(<PinCard place={selected} />, popupNode)}
     </div>
@@ -311,14 +371,14 @@ function startBoundsOf(places: MapPlace[]): LngLatBoundsLike {
   return bounds;
 }
 
-// A 44px tap target (SPEC §16.5) with the 32px sprite at its bottom, so the marker's
-// bottom anchor is the pin's tip. The selected pin grows to 64px.
+// A tap target of at least 44px (SPEC §16.5) with the sprite at its bottom, so the marker's
+// bottom anchor is the pin's tip. The sizes are in map.css: single pins (.pin-place) grow when
+// selected and when zoomed in; clusters stay 32px.
 function pinButton(label: string, sprite: string, badge: string | null, onClick: () => void) {
   const button = document.createElement("button");
   button.type = "button";
   button.setAttribute("aria-label", label);
-  button.className =
-    "group flex size-11 cursor-pointer items-end justify-center data-selected:z-10 data-selected:size-16";
+  button.className = badge ? "pin" : "pin pin-place";
   button.addEventListener("click", (event) => {
     // Keep the map from seeing this tap, which would close the popup it opens.
     event.stopPropagation();
@@ -331,7 +391,7 @@ function pinButton(label: string, sprite: string, badge: string | null, onClick:
   img.src = sprite;
   img.alt = "";
   img.draggable = false;
-  img.className = "pixelated block size-8 group-data-selected:size-16";
+  img.className = "pixelated";
   frame.append(img);
 
   // Cluster count badge on the sprite's top-right corner: cream pixel text on the text color.
@@ -352,31 +412,82 @@ function markSelected(markers: Map<string, Marker>, selectedId: string | null) {
   );
 }
 
+// A speech bubble: the card plus a pixel tail pointing at the pin (map.css). The shadow is on
+// the wrapper so it follows the tail too. Everything lines up on the content's left edge; the
+// button's pixel border sits 6px outside its box, hence its 6px side margins.
 function PinCard({ place }: { place: MapPlace }) {
   const where = [place.city, place.country].filter(Boolean).join(", ");
   return (
-    <Card className="w-64 font-body">
-      <CardHeader>
-        <CardTitle className="break-words">{place.name}</CardTitle>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-2">
-        <p className="flex items-center gap-2">
-          <Image
-            src={categorySprite(place.category)}
-            alt=""
-            width={32}
-            height={32}
-            unoptimized
-            className="pixelated"
-          />
-          {CATEGORY_LABELS[place.category]}
-        </p>
-        {where && <p>{where}</p>}
-        <p>{place.visits === 1 ? "1 visit" : `${place.visits} visits`}</p>
-        <Button asChild className="mt-2 self-start">
-          <Link href={`/places/${place.id}`}>View</Link>
-        </Button>
-      </CardContent>
-    </Card>
+    <div className="relative drop-shadow-pixel">
+      <Card className="w-64 font-body drop-shadow-none">
+        <CardContent className="flex flex-col gap-2">
+          <CardTitle className="break-words">{place.name}</CardTitle>
+          <p className="flex items-center gap-2">
+            {CATEGORY_LABELS[place.category]}
+            <Image
+              src={categorySprite(place.category)}
+              alt=""
+              width={32}
+              height={32}
+              unoptimized
+              className="pixelated"
+            />
+          </p>
+          <hr className="border-0 border-t border-text" />
+          {where && <p>{where}</p>}
+          <p>{place.visits === 1 ? "1 visit" : `${place.visits} visits`}</p>
+          <Button asChild className="mx-1.5 mt-2">
+            <Link href={`/places/${place.id}`}>View</Link>
+          </Button>
+        </CardContent>
+      </Card>
+      <span aria-hidden="true" className="pin-tail" />
+    </div>
+  );
+}
+
+// Mobile: below the avatar menu button. Desktop: top-right.
+const CONTROLS_TOP = "top-[calc(4.75rem+env(safe-area-inset-top))] md:top-[calc(1rem+env(safe-area-inset-top))]";
+
+// Opens beside the map controls, top-aligned with them, and never taller than the map minus
+// room for the attribution, so it covers neither; it scrolls inside when it doesn't fit (SPEC
+// §13.6). 70px = the 44px buttons + their 4px outside border + a 16px gap + the card's 6px
+// outside border.
+function MapLegend({ id }: { id: string }) {
+  return (
+    <div
+      className={cn(
+        CONTROLS_TOP,
+        "absolute right-[calc(1.25rem+70px+env(safe-area-inset-right))] flex max-h-[calc(100%-4.75rem-env(safe-area-inset-top)-4rem)] flex-col md:max-h-[calc(100%-1rem-env(safe-area-inset-top)-4rem)]",
+      )}
+    >
+      <Card
+        id={id}
+        role="region"
+        aria-labelledby={`${id}-title`}
+        className="flex min-h-0 w-56 flex-col font-body"
+      >
+        <CardHeader>
+          <CardTitle id={`${id}-title`}>MAP LEGEND</CardTitle>
+        </CardHeader>
+        <CardContent className="min-h-0 overflow-y-auto">
+          <ul className="flex flex-col gap-2">
+            {CATEGORIES.map((category) => (
+              <LegendRow key={category} sprite={categorySprite(category)} label={CATEGORY_LABELS[category]} />
+            ))}
+            <LegendRow sprite="/sprites/pin_group.png" label="Group" />
+          </ul>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function LegendRow({ sprite, label }: { sprite: string; label: string }) {
+  return (
+    <li className="flex items-center gap-3">
+      <Image src={sprite} alt="" width={32} height={32} unoptimized className="pixelated" />
+      {label}
+    </li>
   );
 }

@@ -454,11 +454,12 @@ Display labels: "Food", "Cafe", "Bar", "Museum", "Landmark", "Park & Nature", "S
 ### 13.1 Setup
 - MapLibre GL JS, full-bleed in its container.
 - **Hybrid pixel effect:** the map has two modes, switched by zoom.
-  - **Pixel mode** (world view, below the threshold): one map pixel is a fixed **block size** of **3** CSS pixels (picked on a real phone), and `image-rendering: pixelated` is applied to the map canvas. The `pixelRatio` varies by device: it is `DPR / round(block × DPR)`, so each map pixel covers a whole number of device pixels, and it is recomputed when the device pixel ratio changes. Fill antialiasing is off. Country borders are crisp 1-map-pixel lines (a negative `line-blur` cancels MapLibre's line antialiasing; disputed borders are drawn solid, since dashes can't be made crisp). Rivers (waterway lines) are hidden; seas and lakes (water fills) stay. Any other line is a whole number of map pixels wide.
+  - **Pixel mode** (world view, below the threshold): one map pixel is a fixed **block size** of **3** CSS pixels (picked on a real phone), or **2** at the lowest zooms (below zoom 2, back to 3 only above 2.5), where the whole world is only a few hundred pixels wide; and `image-rendering: pixelated` is applied to the map canvas. The `pixelRatio` varies by device: it is `DPR / round(block × DPR)`, so each map pixel covers a whole number of device pixels, and it is recomputed when the device pixel ratio or the block size changes. Fill antialiasing is off. Country borders are crisp 1-map-pixel lines (a negative `line-blur` cancels MapLibre's line antialiasing). Disputed borders are hidden, since dashes can't be made crisp, and so are rivers (waterway lines); seas and lakes (water fills) stay. Any other line is a whole number of map pixels wide.
   - **Smooth mode** (zoomed in, from the threshold): full device pixel ratio, no pixelation, fill antialiasing on, normal line widths in CSS pixels that grow with zoom, dashed disputed borders, rivers shown, and all of Positron's road layers.
-  - **Switch:** smooth at zoom ≥ the threshold of **5** (picked on a real phone), and back to pixel mode only below 4.5 (the threshold − 0.5, hysteresis). It happens when a movement ends, never mid-gesture, and snaps without animation. It uses MapLibre's `setPixelRatio` and `setPaintProperty`, never a remount or a style reload.
-- **Start view:** fit bounds to all of the user's places with padding (max zoom ~12, so a single pin isn't zoomed to street level). With no places, show the whole world.
-- Zoom controls styled as pixel buttons (+ / −), top-right, as in the sheet.
+  - **Switch:** smooth at zoom ≥ the threshold of **5** (picked on a real phone), and back to pixel mode only below 4.5 (the threshold − 0.5, hysteresis). It happens when a movement ends, never mid-gesture, and snaps without animation. It uses MapLibre's `setPixelRatio` and `setPaintProperty`, never a remount or a style reload. Pixel mode's block size switches the same way.
+- **Minimum zoom:** the map can't zoom out past the point where the world is as wide as the map container (`log2(width / 512)`, since MapLibre's world is 512 × 2^zoom CSS pixels wide). It is recomputed whenever the container resizes, including orientation changes, and the start view's fit respects it. MapLibre also stops at the zoom where the world is as tall as the map, so on a portrait phone that height limit is the one that applies.
+- **Start view:** fit bounds to all of the user's places with padding (max zoom ~12, so a single pin isn't zoomed to street level). With no places, show the whole world (as much of it as the minimum zoom allows). On desktop the map runs full-bleed behind the floating sidebar (§14.1), so the camera is also padded on the left by the sidebar's width: the start view, flying to a new pin, and zooming all center on the part of the map the sidebar doesn't cover.
+- Zoom controls styled as pixel buttons (+ / −), top-right, as in the sheet, with the legend button below them (§13.6).
 
 ### 13.2 Map style
 - Start from an OpenFreeMap style and recolor using **only palette tokens**: flat colors, no gradients, no hillshading, no 3D buildings.
@@ -478,13 +479,18 @@ Display labels: "Food", "Cafe", "Bar", "Museum", "Landmark", "Park & Nature", "S
 ### 13.4 Pins (important implementation detail)
 - **Pins must be HTML markers, not MapLibre symbol layers.** Everything drawn inside the map canvas gets pixelated by the low `pixelRatio`, which would destroy the 32×32 sprites. HTML markers sit above the canvas and stay crisp.
 - Cluster with **supercluster** over the user's places; recompute on `moveend`/`zoomend`; render only markers within the current viewport.
-- **Single place:** the category sprite at **32px** (CSS) with `image-rendering: pixelated`, anchored at the pin's bottom tip. The selected pin renders at **64px**.
-- **Cluster:** `pin_group.png` at 32px with a small dark badge on its top-right corner showing the count in the pixel font (cream text on `#2D201C`), capped at "99+". The sprite's white circle is too small for a number. Tapping a cluster zooms in to expand it.
+- **Single place:** the category sprite at **32px** (CSS) with `image-rendering: pixelated`, anchored at the pin's bottom tip, and **64px** from zoom 14 up, so pins read well up close. The selected pin is one step up: **64px**, or **96px** from zoom 14. Whole multiples only (§16.5 rule 4). Every pin's tap target is at least 44px.
+- **Cluster:** `pin_group.png` at 32px (at every zoom) with a small dark badge on its top-right corner showing the count in the pixel font (cream text on `#2D201C`), capped at "99+". The sprite's white circle is too small for a number. Tapping a cluster zooms in to expand it.
 - **One pin per place**, even with several visits.
-- Tapping a pin opens a small RPG-card popup with name, category, city/country, number of visits, and "View" → `/places/[id]`.
+- Tapping a pin opens a popup: a speech-bubble pixel card on `surface` with a stepped pixel tail pointing at the pin (pointing up instead when the card has to sit below the pin). Its content is left-aligned on one edge: the name; the category line (label first, then its sprite); a full-width 1px divider in `text`; city/country and the number of visits; then a "View" button → `/places/[id]` stretched to the card's width.
 
 ### 13.5 Plan B
 ~~If the pixelated map proves unworkable on real devices, fall back to the same styled map **without** pixelation, inside a retro pixel frame.~~ **Decided 2026-09-30: not used.** After testing on real devices, the hybrid map (§13.1, pixelated at world zoom, smooth when zoomed in) was chosen over Plan B. See `DECISIONS.md`.
+
+### 13.6 Map legend
+- A pixel icon button (Pixelarticons, 44px) below the zoom buttons toggles a legend card. Closed by default.
+- The card is a pixel card on `surface` titled "MAP LEGEND". It lists all 10 category sprites with their §12.5 labels, in that order, plus the cluster pin labelled "Group".
+- It opens beside the map controls, top-aligned with them, and must fit a 375px screen: it never covers the zoom buttons, the attribution, or the tab bar, and scrolls inside when it's taller than the space.
 
 ---
 
@@ -499,11 +505,13 @@ Display labels: "Food", "Cafe", "Bar", "Museum", "Landmark", "Park & Nature", "S
 | `/places/[id]` | Place detail: place info + all of the user's visits there |
 
 ### 14.1 Navigation
-- **Desktop:** left sidebar (as in the sheet): passport logo + "WANDERDEX", then **Overworld**, **My Visits**, **Add Visit** (opens the add panel on the Overworld). At the bottom: the user's initial in a pixel frame + username, and **Log out** (RPG confirm dialog). No Settings page.
-- **Mobile:** bottom tab bar with **Overworld**, **My Visits**, **Add Visit** (opens the drawer), with Pixelarticons icons and 8px Press Start 2P labels. Log out lives in a small menu button (user initial) in the top-right corner of the Overworld.
+- **Desktop:** a left sidebar styled like the RPG dialog (§16.6): a floating box inset from the viewport edges by a margin, full height minus that margin, with a dark `text` fill, an `accent` pixel border with notched corners and small pixel corner ornaments, cream text, and a solid offset shadow. On the Overworld the map runs full-bleed behind it (§13.1); on other pages it floats over the page background, and the content starts to its right. Items, top to bottom: the passport logo + "WANDERDEX" (links to `/`; hover bounces the logo with a tiny pixel sparkle, press pushes it in), then **Overworld**, **My Visits**, **Add Visit** (opens the add panel on the Overworld), then a divider and, at the bottom, the user's initial in a pixel frame + username, and **Log out** (RPG confirm dialog). No Profile or Settings items, and no Settings page.
+  - **RPG cursor:** a "▶" marker beside the item under the mouse, else the keyboard-focused one, else the current page's. The current page's item keeps the `primary` fill.
+  - **Hover and press:** hover lifts an item up-left onto a larger offset shadow; press pushes it flat (it moves by the full shadow offset and the shadow goes to 0), like the buttons. The shadow is `accent`, which shows on the dark box. Add Visit adds a call to action on hover (a pixel sparkle and a flat shine band), and on click its + icon spins round in steps.
+- **Mobile:** bottom tab bar with **Overworld**, **My Visits**, **Add Visit** (opens the drawer), with Pixelarticons icons and 8px Press Start 2P labels. Same visual language as the sidebar: dark fill down to the bottom screen edge (safe area), an `accent` pixel border along its top edge, the active tab in `accent` with the "▶" marker beside its icon, and a press animation on tap. Tabs stay at least 44px tall. Log out lives in a small menu button (user initial) in the top-right corner of the Overworld.
 
 ### 14.2 Overworld (`/`)
-- **Desktop:** sidebar + map filling the rest. The add panel ("Add Anything") docks along the bottom of the map area with the three mode buttons, as in the sheet. The confirmation card opens as a side panel over the map.
+- **Desktop:** the map fills the window, full-bleed behind the floating sidebar. The add panel ("Add Anything") docks along the bottom of the map area with the three mode buttons, as in the sheet. The confirmation card opens as a side panel over the map.
 - **Mobile:** full-screen map. A slide-up drawer holds the add panel (three mode buttons) and becomes the confirmation card after a lookup.
 
 ### 14.3 My Visits (`/visits`)
@@ -612,7 +620,7 @@ The sheet's "VT223" is a typo for VT323. Line height ~1.2 for VT323, ~1.5 for Pr
 | Alerts | 8bitcn Alert; warning = `warning` bg; error = `error` bg; dark text + Pixelarticons icon |
 | Date & time picker | shadcn/8bitcn Calendar in a Popover + a time input + the precision control |
 | Mobile drawer | shadcn Drawer (Vaul), restyled |
-| Sidebar | Custom (or shadcn Sidebar), restyled |
+| Sidebar | Custom, in the RPG dialog style (§14.1) |
 | Icons | Pixelarticons |
 
 ### 16.7 Assets (provided by the owner, placed in `public/sprites/`)
@@ -651,6 +659,7 @@ Toasts auto-dismiss after ~4 s and have a close (×) button. Copy is in §11.6 a
 8. The sheet's RPG "You found a new place! Add it to your passport?" dialog is **not** used on save; the RPG style is used for all other dialogs.
 9. The rating selector wraps to 2×5 on mobile.
 10. The app name is Wanderdex, not "Travel Passport".
+11. The desktop sidebar follows the RPG dialog style (dark box, accent pixel border, cream text, "▶" cursor) and floats over the map, instead of the sheet's flush dark panel (§14.1).
 
 ---
 

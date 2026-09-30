@@ -4,11 +4,19 @@ import { createContext, use, useMemo, useState } from "react";
 
 import dynamic from "next/dynamic";
 
+import { Loading } from "@/components/loading";
 import { addVisit, type MapPlace, type NewPin } from "@/lib/map/places";
 
-// MapLibre needs the browser (WebGL, window), so the map never renders on the server.
+// MapLibre needs the browser (WebGL, window), so the map never renders on the server. While
+// its code loads, and then while it draws (MapView shows the same plate), "Loading" shows on a
+// dark plate, which reads over the ocean and over land alike.
 const MapView = dynamic(() => import("@/components/map/map-view").then((mod) => mod.MapView), {
   ssr: false,
+  loading: () => (
+    <div className="absolute inset-0 flex items-center justify-center">
+      <Loading className="bg-text px-4 py-3 text-background" />
+    </div>
+  ),
 });
 
 type OverworldApi = {

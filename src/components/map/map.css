@@ -34,6 +34,39 @@
   text-decoration-color: var(--accent);
 }
 
+/* Pins (SPEC §13.4): a button at least 44px square (SPEC §16.5) with the sprite at its bottom
+   centre, so the marker's bottom anchor is the pin's tip. Sprites at whole multiples of 32px
+   only. Single pins are 32px, 64px from zoom 14 (data-near on the map container), and the
+   selected one is a step up: 64px, or 96px from zoom 14. Clusters stay 32px. */
+.pin {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  cursor: pointer;
+}
+.pin img {
+  display: block;
+  width: 32px;
+  height: 32px;
+}
+.pin-place[data-selected] {
+  z-index: 10;
+}
+[data-near] .pin-place,
+[data-near] .pin-place img,
+.pin-place[data-selected],
+.pin-place[data-selected] img {
+  width: 64px;
+  height: 64px;
+}
+[data-near] .pin-place[data-selected],
+[data-near] .pin-place[data-selected] img {
+  width: 96px;
+  height: 96px;
+}
+
 /* Pin popups: our Card draws the box, so drop MapLibre's white bubble and tip. */
 .pin-popup .maplibregl-popup-content {
   padding: 0;
@@ -43,4 +76,55 @@
 }
 .pin-popup .maplibregl-popup-tip {
   display: none;
+}
+
+/* The popup card's speech-bubble tail: a stepped pixel triangle in the card's 6px grid. Its
+   top row covers the card's bottom border, where the surface fill opens into the tail. Dark
+   outline: 30px, 30px, 18px, 6px wide rows; surface fill: 18px, 18px, 6px. It points down
+   at the pin from the card's centre, or from 30px in from a corner at a corner anchor
+   (TAIL_INSET in map-view.tsx). With the card below the pin, it flips to point up. */
+.pin-tail {
+  position: absolute;
+  top: calc(100% - 6px);
+  left: calc(50% - 15px);
+  width: 30px;
+  height: 24px;
+  background: var(--text);
+  clip-path: polygon(
+    0 0,
+    30px 0,
+    30px 12px,
+    24px 12px,
+    24px 18px,
+    18px 18px,
+    18px 24px,
+    12px 24px,
+    12px 18px,
+    6px 18px,
+    6px 12px,
+    0 12px
+  );
+}
+.pin-tail::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--surface);
+  clip-path: polygon(6px 0, 24px 0, 24px 12px, 18px 12px, 18px 18px, 12px 18px, 12px 12px, 6px 12px);
+}
+.maplibregl-popup-anchor-bottom-left .pin-tail,
+.maplibregl-popup-anchor-top-left .pin-tail {
+  left: 15px;
+}
+.maplibregl-popup-anchor-bottom-right .pin-tail,
+.maplibregl-popup-anchor-top-right .pin-tail {
+  left: auto;
+  right: 15px;
+}
+.maplibregl-popup-anchor-top .pin-tail,
+.maplibregl-popup-anchor-top-left .pin-tail,
+.maplibregl-popup-anchor-top-right .pin-tail {
+  top: auto;
+  bottom: calc(100% - 6px);
+  scale: 1 -1;
 }
