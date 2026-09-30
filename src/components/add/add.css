@@ -1,0 +1,6 @@
+/* The mobile add drawer (add-flow.tsx) ends on top of the tab bar. Vaul paints the drawer's
+   background 200% further down (a ::after that covers overshoot while dragging), which would
+   hide the tab bar. Vaul's rule is unlayered, so this needs to be too, and more specific. */
+.add-drawer[data-vaul-drawer][data-vaul-drawer-direction="bottom"]::after {
+  content: none;
+}

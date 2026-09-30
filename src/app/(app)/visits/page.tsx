@@ -1,13 +1,23 @@
 import type { Metadata } from "next";
 
+import { loadVisits } from "@/app/(app)/visits/actions";
+import { VisitList } from "@/app/(app)/visits/visit-list";
+
 export const metadata: Metadata = { title: "My Visits · Wanderdex" };
 
-// Placeholder. The visits list (SPEC §14.3) replaces this.
-export default function VisitsPage() {
+// My Visits, basic version (SPEC §14.3): newest visit first, 30 at a time. Filters and ratings
+// come in Phase 2.
+export default async function VisitsPage() {
+  const first = await loadVisits(0);
+
   return (
-    <section className="flex flex-col gap-4 px-4 py-8 md:px-8">
+    <section className="flex max-w-2xl flex-col gap-6 px-4 py-8 md:px-8">
       <h1>My Visits</h1>
-      <p>Your visits will show up here.</p>
+      {first.items.length ? (
+        <VisitList initial={first} />
+      ) : (
+        <p>No visits yet, traveler. Your adventure starts on the Overworld!</p>
+      )}
     </section>
   );
 }

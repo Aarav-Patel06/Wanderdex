@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import { AddFlow } from "@/components/add/add-flow";
 import { Overworld } from "@/components/map/overworld";
 import { placesFromVisits, type VisitRow } from "@/lib/map/places";
 import { createClient } from "@/lib/supabase/server";
@@ -17,5 +18,9 @@ export default async function OverworldPage() {
     .overrideTypes<VisitRow[], { merge: false }>();
   if (error) throw error;
 
-  return <Overworld initialPlaces={placesFromVisits(data)} />;
+  return (
+    <Overworld initialPlaces={placesFromVisits(data)}>
+      <AddFlow />
+    </Overworld>
+  );
 }

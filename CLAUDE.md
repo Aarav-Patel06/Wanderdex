@@ -16,6 +16,7 @@
 - 8bitcn components: `pnpm dlx shadcn@latest add @8bitcn/<name>`. After adding any shadcn or 8bitcn component:
   - Change its `cn` import to `@/lib/utils` (the configured one knows our custom classes).
   - Replace any lucide icons with Pixelarticons. `lucide-react` must never come back into `package.json`; `pnpm remove` it if the CLI adds it.
+  - After any shadcn/8bitcn `add`, run git diff and restore any customized file it overwrote (e.g. ui/button.tsx, styles/retro.css).
 
 ## Checks
 - `pnpm lint`, `pnpm build`, and `pnpm test` must pass before calling work done.

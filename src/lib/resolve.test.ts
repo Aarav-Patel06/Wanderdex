@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { APPLE_PLACE_PAGES, APPLE_SHORT_LINKS, CREPE_STATION, GOOGLE_SHORT_LINKS } from "@/lib/links/fixtures";
+import { verifyPlace } from "@/lib/place-signature";
 import { ResolveError, resolveLink, resolveText } from "@/lib/resolve";
 
 const PLACE = {
@@ -55,12 +56,16 @@ async function resolveError(promise: Promise<unknown>) {
   return { code, parsedName };
 }
 
+const SECRET = "test-secret";
+
 beforeEach(() => {
+  vi.stubEnv("RESOLVE_SIGNING_SECRET", SECRET);
   vi.spyOn(console, "warn").mockImplementation(() => {});
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
 afterEach(() => {
+  vi.unstubAllEnvs();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -79,12 +84,22 @@ describe("resolveLink", () => {
       name: "Joe’s on Newbury",
       visited: null,
       source_input: SHORT,
-      candidates: [{ google_place_id: "ChIJ-joes", category: "food", city: "Boston", country_code: "US" }],
+      candidates: [
+        { google_place_id: "ChIJ-joes", category: "food", city: "Boston", country_code: "US", timezone: "America/New_York" },
+      ],
     });
     expect(bodiesFor(fetchMock, TEXT_SEARCH)[0]).toMatchObject({
       textQuery: "Joe’s on Newbury",
       locationBias: { circle: { center: { latitude: 42.350511, longitude: -71.07966 }, radius: 500 } },
     });
+    expect(verifyPlace(result.candidates[0], SECRET)).toMatchObject({ google_place_id: "ChIJ-joes" });
+  });
+
+  it("fails closed without the signing secret, before any fetch", async () => {
+    vi.stubEnv("RESOLVE_SIGNING_SECRET", "");
+    const fetchMock = mockFetch({});
+    await expect(resolveLink(CREPE_STATION)).rejects.toThrow("RESOLVE_SIGNING_SECRET is not set");
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("parses a long link without fetching it", async () => {
@@ -202,6 +217,14 @@ describe("resolveText", () => {
     });
     expect(bodiesFor(fetchMock, TEXT_SEARCH)[0]).toEqual({ textQuery: "Ichiran Shibuya", pageSize: 3, languageCode: "en" });
     expect(bodiesFor(fetchMock, GEMINI)[0].contents[0].parts[0].text).toContain("Today's date: 2026-09-29");
+    expect(verifyPlace(result.candidates[0], SECRET)).not.toBeNull();
+  });
+
+  it("fails closed without the signing secret, before any fetch", async () => {
+    vi.stubEnv("RESOLVE_SIGNING_SECRET", "");
+    const fetchMock = mockFetch({});
+    await expect(resolveText("the louvre", "Europe/Paris", NOW)).rejects.toThrow("RESOLVE_SIGNING_SECRET is not set");
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("searches the query alone when there's no hint", async () => {

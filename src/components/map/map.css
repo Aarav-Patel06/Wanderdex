@@ -128,3 +128,15 @@
   bottom: calc(100% - 6px);
   scale: 1 -1;
 }
+
+/* The desktop confirmation panel (SPEC §14.2) covers the map's right edge while it's open, so
+   the zoom buttons, the legend, the add panel's dock, and the empty-state hint move left of
+   it: the panel's 24rem plus its 1rem margin, its 6px outside border, and a gap. */
+.overworld {
+  --map-right: 0px;
+}
+@media (min-width: 48rem) {
+  .overworld:has([data-confirm-panel]) {
+    --map-right: calc(25rem + 8px);
+  }
+}

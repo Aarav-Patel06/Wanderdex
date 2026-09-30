@@ -21,12 +21,14 @@ interface RpgDialogProps {
   title: string;
   description?: string;
   choices: RpgChoice[];
+  // Radix's focus return on close; preventDefault() keeps focus where a choice moved it.
+  onCloseAutoFocus?: (event: Event) => void;
 }
 
 // The app's only dialog style (SPEC §3, §16.6): dark box, accent pixel border,
 // cream text, vertical choices with "▶" next to the focused one.
 // Radix handles the focus trap, Escape to close, and focusing the first choice on open.
-export function RpgDialog({ open, onOpenChange, title, description, choices }: RpgDialogProps) {
+export function RpgDialog({ open, onOpenChange, title, description, choices, onCloseAutoFocus }: RpgDialogProps) {
   const [focused, setFocused] = useState(0);
   const buttons = useRef<(HTMLButtonElement | null)[]>([]);
 
@@ -50,6 +52,7 @@ export function RpgDialog({ open, onOpenChange, title, description, choices }: R
       <DialogContent
         font="normal"
         showCloseButton={false}
+        onCloseAutoFocus={onCloseAutoFocus}
         className="gap-6 bg-text p-6 text-background ring-0 sm:max-w-md *:aria-hidden:border-accent"
       >
         <DialogTitle className="text-h3">{title}</DialogTitle>

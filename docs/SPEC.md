@@ -195,6 +195,7 @@ wanderdex/
 | `GEMINI_API_KEY` | Server only | **Yes** |
 | `ANTHROPIC_API_KEY` | Server only; only if the Claude Haiku fallback is ever enabled | **Yes** |
 | `HEALTH_PING_TOKEN` | `/api/health` + GitHub Actions secret | **Yes** |
+| `RESOLVE_SIGNING_SECRET` | Server only; signs lookup candidates in `/api/resolve/*` and checks them in `/api/visits` | **Yes** |
 
 If the Supabase project still shows the older "anon" and "service_role" key names, use those in the same roles. `.env.local` is git-ignored; `.env.example` lists every name with empty values; production values live in Vercel's environment settings.
 
@@ -362,7 +363,7 @@ Shown after any successful lookup:
 - **Buttons:** "Save visit" (primary), "Cancel" (secondary), and a "Can't find it? Drop a pin" link.
 
 ### 11.6 Saving (`/api/visits`)
-1. Re-validate input on the server (zod).
+1. Re-validate input on the server (zod), and check the place's signature: every candidate from `/api/resolve/*` is signed on the server (HMAC-SHA256 with `RESOLVE_SIGNING_SECRET`) over all the place fields the save uses, with a 24-hour expiry. A missing, wrong, or expired signature saves nothing and shows "The map spirits aren't answering. Try again." Only the user's choices (category, date/time, precision) are unsigned. Without the secret, lookups and saves fail. Manual places (§11.4) aren't from a lookup and skip the signature.
 2. Upsert the place by `google_place_id` with the secret key (insert if new, otherwise reuse).
 3. Compute `timezone` from coordinates and `visited_at` in UTC.
 4. Insert the visit with the chosen category.

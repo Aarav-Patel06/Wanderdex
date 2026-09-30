@@ -1,10 +1,11 @@
 import { type ParsedText, parseText } from "@/lib/ai/parse";
-import { todayIn } from "@/lib/dates";
+import { timezoneAt, todayIn } from "@/lib/dates";
 import { type Candidate, nearbySearchWithRetry, PlacesError, textSearch } from "@/lib/google/places";
 import { isApplePlacePage, readApplePlace } from "@/lib/links/apple";
 import { ExpandError, expandLink } from "@/lib/links/expand";
 import { parseMapsLink } from "@/lib/links/parse";
 import { readMapsLink } from "@/lib/links/validate";
+import { type SignedPlace, signingSecret, signPlace } from "@/lib/place-signature";
 
 // The lookup pipeline behind /api/resolve/link and /api/resolve/text (SPEC §11.1, §11.3).
 
@@ -17,6 +18,8 @@ export const ERROR_STATUS = {
   no_results: 404,
   rate_limited: 429,
   upstream_error: 502,
+  // /api/visits: the place's signature is missing, wrong, or expired.
+  place_unverified: 403,
 } as const;
 
 export type ResolveErrorCode = keyof typeof ERROR_STATUS;
@@ -33,8 +36,13 @@ export class ResolveError extends Error {
 
 export type Visited = ParsedText["visited"];
 
+// Each candidate carries its IANA zone, so the confirmation card can show and pre-fill the
+// place's local time (SPEC §8) without the tz lookup table in the browser. It's signed, so
+// /api/visits can trust it (lib/place-signature).
+export type ResolvedCandidate = SignedPlace;
+
 export type ResolveResult = {
-  candidates: Candidate[];
+  candidates: ResolvedCandidate[];
   visited: Visited;
   source_input: string;
 };
@@ -42,6 +50,8 @@ export type ResolveResult = {
 export type LinkResult = ResolveResult & { name: string | null };
 
 export async function resolveLink(input: string): Promise<LinkResult> {
+  // Before any upstream call: without the secret there are no signed results to return.
+  const secret = signingSecret();
   const url = readMapsLink(input);
   if (!url) throw new ResolveError("not_maps_link");
 
@@ -68,20 +78,22 @@ export async function resolveLink(input: string): Promise<LinkResult> {
   const candidates = await findPlaces(
     () => (name ? textSearch(name, location) : nearbySearchWithRetry(location!)),
     name,
+    secret,
   );
   return { candidates, visited: null, source_input: url.href, name };
 }
 
 export async function resolveText(text: string, timeZone: string, now = new Date()): Promise<ResolveResult> {
+  const secret = signingSecret();
   const parsed = await parseText({ text, today: todayIn(timeZone, now), timeZone });
 
   // Without the AI, search the raw text and let the date default to now (§11.3 step 4).
   const query = parsed ? [parsed.query, parsed.location_hint].filter(Boolean).join(" ") : text;
-  const candidates = await findPlaces(() => textSearch(query), null);
+  const candidates = await findPlaces(() => textSearch(query), null, secret);
   return { candidates, visited: parsed?.visited ?? null, source_input: text };
 }
 
-async function findPlaces(search: () => Promise<Candidate[]>, name: string | null) {
+async function findPlaces(search: () => Promise<Candidate[]>, name: string | null, secret: string) {
   let candidates: Candidate[];
   try {
     candidates = await search();
@@ -90,5 +102,7 @@ async function findPlaces(search: () => Promise<Candidate[]>, name: string | nul
     throw new ResolveError(error.status === 429 ? "rate_limited" : "upstream_error", name);
   }
   if (!candidates.length) throw new ResolveError("no_results", name);
-  return candidates;
+  return candidates.map((candidate) =>
+    signPlace({ ...candidate, timezone: timezoneAt(candidate.lat, candidate.lng) }, secret),
+  );
 }

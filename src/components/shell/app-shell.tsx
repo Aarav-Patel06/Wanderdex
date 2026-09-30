@@ -11,6 +11,7 @@ import { Notes } from "pixelarticons/react/Notes";
 import { Plus } from "pixelarticons/react/Plus";
 
 import { logout } from "@/app/(app)/actions";
+import { AddVisitProvider, useAddVisitController } from "@/components/add/add-visit-context";
 import { RpgDialog } from "@/components/dialogs/rpg-dialog";
 import {
   DropdownMenu,
@@ -38,6 +39,7 @@ export function AppShell({ username, children }: { username: string; children: R
   const [logoutOpen, setLogoutOpen] = useState(false);
   const [leaving, startLeaving] = useTransition();
   const [spinning, setSpinning] = useState(false);
+  const addVisit = useAddVisitController();
   const initial = username.charAt(0).toUpperCase();
 
   return (
@@ -89,11 +91,13 @@ export function AppShell({ username, children }: { username: string; children: R
               ))}
               <li className="nav-row flex items-center gap-2">
                 <NavCursor />
-                {/* Opens the add panel in a later step. */}
                 <button
                   type="button"
                   data-spin={spinning || undefined}
-                  onClick={() => setSpinning(true)}
+                  onClick={() => {
+                    setSpinning(true);
+                    addVisit.request();
+                  }}
                   onAnimationEnd={(event) => {
                     if (event.animationName === "nav-spin") setSpinning(false);
                   }}
@@ -136,7 +140,8 @@ export function AppShell({ username, children }: { username: string; children: R
           pathname !== "/" && "md:pl-80",
         )}
       >
-        {children}
+        {/* Pages open the add panel through this (the Overworld's hint, the add panel itself). */}
+        <AddVisitProvider value={addVisit}>{children}</AddVisitProvider>
 
         {pathname === "/" && (
           // modal={false}: the menu hands off to the RPG dialog without the two fighting over focus.
@@ -180,8 +185,7 @@ export function AppShell({ username, children }: { username: string; children: R
             <span>{label}</span>
           </Link>
         ))}
-        {/* Opens the add drawer in a later step. */}
-        <button type="button" className={tabItem}>
+        <button type="button" onClick={addVisit.request} className={tabItem}>
           <Plus aria-hidden="true" className="size-6" />
           <span>Add Visit</span>
         </button>

@@ -23,6 +23,7 @@ export interface BitInputProps
   extends React.InputHTMLAttributes<HTMLInputElement>,
     VariantProps<typeof inputVariants> {
   asChild?: boolean;
+  ref?: React.Ref<HTMLInputElement>;
 }
 
 function Input({ ...props }: BitInputProps) {

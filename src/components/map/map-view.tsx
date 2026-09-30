@@ -11,6 +11,7 @@ import {
   Map as MapLibreMap,
   Marker,
   type Offset,
+  type PaddingOptions,
   Popup,
 } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -87,24 +88,62 @@ function popupOffset(pinHeight: number): Offset {
 // pin is near a side edge, which on a phone is most of the screen, and the card then covers the
 // pin's edge. An endless bottom padding makes "doesn't fit below" always true, so the card goes
 // above the pin unless it doesn't fit there either (then below). Only the corners and top/bottom
-// remain. The left padding keeps the card out from under the desktop sidebar.
-const popupPadding = (left: number) => ({ bottom: Infinity, left });
+// remain. The side padding keeps the card out from under the desktop sidebar and panels.
+const popupPadding = ({ left, right }: PaddingOptions) => ({ bottom: Infinity, left, right });
 
-// The desktop sidebar floats over the map's left edge (SPEC §14.1). This is how far it reaches
-// into the map; 0 on mobile, where it's display: none (an all-zero rect).
-function sidebarInset(container: HTMLElement) {
-  const sidebar = document.querySelector("[data-sidebar]");
-  if (!sidebar) return 0;
-  const inset = sidebar.getBoundingClientRect().right - container.getBoundingClientRect().left;
-  return Math.max(0, Math.round(inset));
+// How far the panels floating over the map reach into it (SPEC §13.1): the desktop sidebar on
+// the left (SPEC §14.1), and the add panel's dock at the bottom and the confirmation panel on
+// the right (data-map-cover, see useMapCover). A hidden panel (display: none, e.g. the sidebar
+// on mobile) has an all-zero rect and counts as 0.
+type Padding = { top: number; right: number; bottom: number; left: number };
+
+function cameraPadding(container: HTMLElement): Padding {
+  const box = container.getBoundingClientRect();
+  const reach = (selector: string, inset: (rect: DOMRect) => number) =>
+    Math.max(
+      0,
+      ...Array.from(document.querySelectorAll(selector), (element) => {
+        const rect = element.getBoundingClientRect();
+        return rect.width && rect.height ? Math.round(inset(rect)) : 0;
+      }),
+    );
+  return {
+    top: 0,
+    left: reach("[data-sidebar]", (rect) => rect.right - box.left),
+    right: reach('[data-map-cover="right"]', (rect) => box.right - rect.left),
+    bottom: reach('[data-map-cover="bottom"]', (rect) => box.bottom - rect.top),
+  };
+}
+
+// Brings the camera's padding up to date without moving the map on screen: only the padded
+// center (where flyTo, fitBounds, and zooming aim) moves. A padding change is a jumpTo, which
+// would cut a flight or a pinch's inertia short, so while the map moves it waits for moveend.
+function syncPadding(map: MapLibreMap, atMoveEnd = false) {
+  if (!atMoveEnd && map.isMoving()) return;
+  const next = cameraPadding(map.getContainer());
+  const { top = 0, right = 0, bottom = 0, left = 0 } = map.getPadding();
+  if (next.top === top && next.right === right && next.bottom === bottom && next.left === left) return;
+  const center = map.project(map.getCenter());
+  const dx = (next.left - left - (next.right - right)) / 2;
+  const dy = (next.top - top - (next.bottom - bottom)) / 2;
+  map.jumpTo({ center: map.unproject([center.x + dx, center.y + dy]), padding: next });
 }
 
 type PinProps = { id: string; name: string; category: Category };
 
 const pinKey = (id: string | null) => `p:${id}`;
 
-// `focus` is the pin to pan to; a new object each time a visit is saved.
-export function MapView({ places, focus }: { places: MapPlace[]; focus: NewPin | null }) {
+// `focus` is the pin to pan to; a new object each time a visit is saved. `coverTick` changes
+// when a panel over the map changes (useMapCover).
+export function MapView({
+  places,
+  focus,
+  coverTick,
+}: {
+  places: MapPlace[];
+  focus: NewPin | null;
+  coverTick: number;
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [map, setMap] = useState<MapLibreMap | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -160,9 +199,10 @@ export function MapView({ places, focus }: { places: MapPlace[]; focus: NewPin |
         map.keyboard.disableRotation();
 
         // The camera's padding keeps the start view's fit, flyTo, and zooming centered in the
-        // part of the map the desktop sidebar doesn't cover. It's set before the fit, which adds
-        // FIT_PADDING on top of it. Duration 0 fits at once, as the constructor's bounds would.
-        map.setPadding({ top: 0, right: 0, bottom: 0, left: sidebarInset(containerRef.current) });
+        // part of the map the desktop sidebar and panels don't cover. It's set before the fit,
+        // which adds FIT_PADDING on top of it. Duration 0 fits at once, as the constructor's
+        // bounds would.
+        map.setPadding(cameraPadding(containerRef.current));
         map.fitBounds(startBounds, { padding: FIT_PADDING, maxZoom: START_MAX_ZOOM, duration: 0 });
         setNear(map.getZoom() >= NEAR_ZOOM);
         map.on("zoom", () => setNear(map.getZoom() >= NEAR_ZOOM));
@@ -171,13 +211,14 @@ export function MapView({ places, focus }: { places: MapPlace[]; focus: NewPin |
         // Stop zooming out once the world is as wide as the map: further out, the pixels swallow
         // countries. MapLibre fires resize for container size changes, orientation changes
         // included. setMinZoom zooms back in if the map is now below the new minimum. The
-        // sidebar comes and goes at the desktop breakpoint, so the camera's inset follows it.
+        // sidebar and dock come and go at the desktop breakpoint, so the camera's padding
+        // follows them. Padding changes wait for a movement to end.
         map.on("resize", () => {
           const minZoom = minZoomFor(map.getContainer().clientWidth);
           if (map.getMinZoom() !== minZoom) map.setMinZoom(minZoom);
-          const left = sidebarInset(map.getContainer());
-          if (map.getPadding().left !== left) map.setPadding({ ...map.getPadding(), left });
+          syncPadding(map);
         });
+        map.on("moveend", () => syncPadding(map, true));
 
         let mode: MapMode = modeAt(map.getZoom(), SMOOTH_AT);
         let block = blockAt(map.getZoom());
@@ -286,6 +327,10 @@ export function MapView({ places, focus }: { places: MapPlace[]; focus: NewPin |
   }, [map, index]);
 
   useEffect(() => {
+    if (map) syncPadding(map);
+  }, [map, coverTick]);
+
+  useEffect(() => {
     selectedRef.current = selectedId;
     markSelected(markers.current, selectedId);
   }, [selectedId]);
@@ -295,7 +340,7 @@ export function MapView({ places, focus }: { places: MapPlace[]; focus: NewPin |
     const popup = new Popup({
       closeButton: false,
       offset: popupOffset(near ? 96 : 64),
-      padding: popupPadding(map.getPadding().left ?? 0),
+      padding: popupPadding(map.getPadding()),
       maxWidth: "none",
       className: "pin-popup",
     })
@@ -318,7 +363,13 @@ export function MapView({ places, focus }: { places: MapPlace[]; focus: NewPin |
       if (markers.current.has(pinKey(focus.id))) setSelectedId(focus.id);
     };
     map.once("moveend", select);
-    map.flyTo({ center: [focus.lng, focus.lat], zoom: Math.max(map.getZoom(), FOCUS_ZOOM) });
+    // The panels as they are now (the confirmation card has just closed), so the flight ends
+    // centered in the uncovered part of the map and leaves that padding in place.
+    map.flyTo({
+      center: [focus.lng, focus.lat],
+      zoom: Math.max(map.getZoom(), FOCUS_ZOOM),
+      padding: cameraPadding(map.getContainer()),
+    });
     return () => {
       map.off("moveend", select);
     };
@@ -336,8 +387,14 @@ export function MapView({ places, focus }: { places: MapPlace[]; focus: NewPin |
         </div>
       )}
 
-      {/* Mobile: below the avatar menu button (top-right, 44px + shadow). Desktop: top-right. */}
-      <div className={cn(CONTROLS_TOP, "absolute right-[calc(1.25rem+env(safe-area-inset-right))] flex flex-col gap-4")}>
+      {/* Mobile: below the avatar menu button (top-right, 44px + shadow). Desktop: top-right, left
+          of the confirmation panel while it's open (--map-right, map.css). */}
+      <div
+        className={cn(
+          CONTROLS_TOP,
+          "absolute right-[calc(1.25rem+var(--map-right)+env(safe-area-inset-right))] flex flex-col gap-4",
+        )}
+      >
         <Button variant="secondary" size="icon" aria-label="Zoom in" onClick={() => map?.zoomIn()} className="mx-0">
           <Plus aria-hidden="true" className="size-6" />
         </Button>
@@ -458,7 +515,7 @@ function MapLegend({ id }: { id: string }) {
     <div
       className={cn(
         CONTROLS_TOP,
-        "absolute right-[calc(1.25rem+70px+env(safe-area-inset-right))] flex max-h-[calc(100%-4.75rem-env(safe-area-inset-top)-4rem)] flex-col md:max-h-[calc(100%-1rem-env(safe-area-inset-top)-4rem)]",
+        "absolute right-[calc(1.25rem+70px+var(--map-right)+env(safe-area-inset-right))] flex max-h-[calc(100%-4.75rem-env(safe-area-inset-top)-4rem)] flex-col md:max-h-[calc(100%-1rem-env(safe-area-inset-top)-4rem)]",
       )}
     >
       <Card

@@ -113,7 +113,7 @@ function SelectContent({
       className={cn(
         font === "retro" && "retro",
         className,
-        "relative rounded-none border-4 border-foreground dark:border-ring -ml-1 mt-1 text-body"
+        "relative rounded-none border-4 border-foreground dark:border-ring -ml-1 mt-1 text-body shadow-none ring-0 drop-shadow-pixel"
       )}
       {...props}
     >
