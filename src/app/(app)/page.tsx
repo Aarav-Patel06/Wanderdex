@@ -1,13 +1,21 @@
 import type { Metadata } from "next";
 
+import { Overworld } from "@/components/map/overworld";
+import { placesFromVisits, type VisitRow } from "@/lib/map/places";
+import { createClient } from "@/lib/supabase/server";
+
 export const metadata: Metadata = { title: "Overworld · Wanderdex" };
 
-// Placeholder. The map (SPEC §13) replaces this.
-export default function OverworldPage() {
-  return (
-    <section className="flex min-h-full flex-col items-center justify-center gap-4 px-4 py-20 text-center">
-      <h1>Overworld</h1>
-      <p>The map is on its way.</p>
-    </section>
-  );
+export default async function OverworldPage() {
+  const supabase = await createClient();
+  // The user's session applies, so RLS returns only their own visits (SPEC §9).
+  const { data, error } = await supabase
+    .from("visits")
+    .select("category, place:places(id, name, city, country, lat, lng)")
+    .order("created_at", { ascending: false })
+    // Untyped client: it can't tell that `place` is many-to-one (one object, not an array).
+    .overrideTypes<VisitRow[], { merge: false }>();
+  if (error) throw error;
+
+  return <Overworld initialPlaces={placesFromVisits(data)} />;
 }

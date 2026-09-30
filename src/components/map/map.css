@@ -1,0 +1,45 @@
+/* Overworld map overrides for MapLibre's own classes. Imported after maplibre-gl.css so
+   these win at equal specificity. Colors are palette tokens only (SPEC §16.2). */
+
+/* Pixel effect (SPEC §13.1): the canvas is drawn at a low pixelRatio and scaled up crisply. */
+.maplibregl-canvas {
+  image-rendering: pixelated;
+}
+
+/* Required attribution (SPEC §12.4, §18), restyled as a small pixel panel. */
+.maplibregl-ctrl-bottom-right {
+  right: env(safe-area-inset-right);
+}
+/* Mobile: the map already ends above the tab bar, which pads the bottom inset itself. */
+@media (min-width: 48rem) {
+  .maplibregl-ctrl-bottom-right {
+    bottom: env(safe-area-inset-bottom);
+  }
+}
+.maplibregl-ctrl.maplibregl-ctrl-attrib {
+  margin: 0;
+  padding: 2px 8px;
+  border-top: 4px solid var(--text);
+  border-left: 4px solid var(--text);
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--font-vt323);
+  font-size: 16px;
+  line-height: 1.2;
+}
+.maplibregl-ctrl-attrib a {
+  color: var(--text);
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+}
+
+/* Pin popups: our Card draws the box, so drop MapLibre's white bubble and tip. */
+.pin-popup .maplibregl-popup-content {
+  padding: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+.pin-popup .maplibregl-popup-tip {
+  display: none;
+}

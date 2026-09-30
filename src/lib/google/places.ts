@@ -14,6 +14,8 @@ const MAX_RESULTS = 3;
 const BIAS_RADIUS_M = 500;
 const NEARBY_RADII_M = [50, 150];
 const TIMEOUT_MS = 8000;
+// English names and addresses where Google has them. A request parameter, not a field: no SKU change.
+const LANGUAGE_CODE = "en";
 
 export type Candidate = {
   google_place_id: string;
@@ -52,6 +54,7 @@ export function textSearch(query: string, bias?: LatLng | null) {
   return search("searchText", {
     textQuery: query,
     pageSize: MAX_RESULTS,
+    languageCode: LANGUAGE_CODE,
     ...(bias && { locationBias: { circle: circle(bias, BIAS_RADIUS_M) } }),
   });
 }
@@ -61,6 +64,7 @@ export function nearbySearch(point: LatLng, radius: number) {
     locationRestriction: { circle: circle(point, radius) },
     rankPreference: "DISTANCE",
     maxResultCount: MAX_RESULTS,
+    languageCode: LANGUAGE_CODE,
   });
 }
 
@@ -127,7 +131,7 @@ export function toCandidate(place: GooglePlace): Candidate | null {
     types,
     category: categoryFromGoogle(place.primaryType, types),
     address: place.formattedAddress ?? null,
-    city: cityOf(components),
+    city: cityOf(components, country?.shortText),
     country: country?.longText ?? null,
     country_code: country?.shortText?.toUpperCase() ?? null,
     lat,
@@ -135,8 +139,14 @@ export function toCandidate(place: GooglePlace): Candidate | null {
   };
 }
 
-// locality → postal_town → administrative_area_level_2 → administrative_area_level_1.
-function cityOf(components: AddressComponent[]) {
+// Google gives Tokyo's wards (Shibuya, Minato…) as the locality, which would split Tokyo into many cities.
+const TOKYO = ["Tokyo", "東京都"];
+
+// locality → postal_town → administrative_area_level_2 → administrative_area_level_1,
+// except anywhere in Tokyo (JP, administrative_area_level_1 Tokyo) is "Tokyo".
+function cityOf(components: AddressComponent[], countryCode: string | undefined) {
+  const region = findComponent(components, "administrative_area_level_1")?.longText;
+  if (countryCode?.toUpperCase() === "JP" && region && TOKYO.includes(region)) return "Tokyo";
   for (const type of ["locality", "postal_town", "administrative_area_level_2", "administrative_area_level_1"]) {
     const text = findComponent(components, type)?.longText;
     if (text) return text;

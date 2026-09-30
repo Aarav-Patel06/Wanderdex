@@ -131,6 +131,7 @@ describe("resolveLink", () => {
       expect(bodiesFor(fetchMock, TEXT_SEARCH)[0]).toEqual({
         textQuery: "Sushi By M",
         pageSize: 3,
+        languageCode: "en",
         locationBias: { circle: { center: { latitude: 40.7266083, longitude: -73.9888537 }, radius: 500 } },
       });
       expect(fetchMock.mock.calls.map(([input]) => input.toString())).toEqual([short, final, TEXT_SEARCH]);
@@ -199,7 +200,7 @@ describe("resolveText", () => {
       source_input: text,
       candidates: [{ google_place_id: "ChIJ-joes" }],
     });
-    expect(bodiesFor(fetchMock, TEXT_SEARCH)[0]).toEqual({ textQuery: "Ichiran Shibuya", pageSize: 3 });
+    expect(bodiesFor(fetchMock, TEXT_SEARCH)[0]).toEqual({ textQuery: "Ichiran Shibuya", pageSize: 3, languageCode: "en" });
     expect(bodiesFor(fetchMock, GEMINI)[0].contents[0].parts[0].text).toContain("Today's date: 2026-09-29");
   });
 

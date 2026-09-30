@@ -66,6 +66,7 @@ describe("textSearch", () => {
     expect(body).toEqual({
       textQuery: "Crêpe Station",
       pageSize: 3,
+      languageCode: "en",
       locationBias: { circle: { center: { latitude: 48.8694204, longitude: 2.2890529 }, radius: 500 } },
     });
   });
@@ -73,7 +74,7 @@ describe("textSearch", () => {
   it("leaves out the bias without coordinates", async () => {
     const fetchMock = mockFetch(places());
     await textSearch("ramen in shibuya");
-    expect(sent(fetchMock).body).toEqual({ textQuery: "ramen in shibuya", pageSize: 3 });
+    expect(sent(fetchMock).body).toEqual({ textQuery: "ramen in shibuya", pageSize: 3, languageCode: "en" });
   });
 
   it("normalizes results into candidates", async () => {
@@ -126,6 +127,7 @@ describe("nearbySearch", () => {
       locationRestriction: { circle: { center: { latitude: 1.5, longitude: -2.5 }, radius: 50 } },
       rankPreference: "DISTANCE",
       maxResultCount: 3,
+      languageCode: "en",
     });
   });
 });
@@ -170,6 +172,25 @@ describe("toCandidate: city and country", () => {
 
   it("falls back to administrative_area_level_1", () => {
     expect(withComponents([component("administrative_area_level_1", "Madhya Pradesh")])?.city).toBe("Madhya Pradesh");
+  });
+
+  describe("Tokyo", () => {
+    const japan = { longText: "Japan", shortText: "JP", types: ["country", "political"] };
+    const shibuya = component("locality", "Shibuya");
+
+    it.each(["Tokyo", "東京都"])("uses Tokyo instead of the ward when the prefecture is %s", (tokyo) => {
+      expect(withComponents([shibuya, component("administrative_area_level_1", tokyo), japan])?.city).toBe("Tokyo");
+    });
+
+    it("keeps the locality in other prefectures", () => {
+      const c = [component("locality", "Osaka"), component("administrative_area_level_1", "Osaka"), japan];
+      expect(withComponents(c)?.city).toBe("Osaka");
+    });
+
+    it("only applies in Japan", () => {
+      const c = [shibuya, component("administrative_area_level_1", "Tokyo"), { ...japan, longText: "X", shortText: "US" }];
+      expect(withComponents(c)?.city).toBe("Shibuya");
+    });
   });
 
   it("leaves city and country empty when missing", () => {

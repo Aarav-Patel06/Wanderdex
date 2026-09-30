@@ -79,7 +79,7 @@ Storing Google Places data (names, coordinates, addresses, types) in our own dat
 | Repo | Public GitHub repo `wanderdex`, no secrets committed |
 | Hosting | Vercel free tier, `wanderdex.vercel.app` (or closest available) |
 | Supabase keep-alive | GitHub Actions scheduled ping every ~3 days |
-| Google key | Budget alert + daily request caps set on day one |
+| Google key | Budget alert on day one; daily request caps once billing is upgraded from the Free Trial (see §17) |
 
 ---
 
@@ -393,13 +393,14 @@ Messages that need acknowledgment use the RPG dialog. Non-blocking messages use 
 
 ### 12.1 Google Places API (New)
 - **Enable only** Places API (New) in Google Cloud.
-- **Text Search:** `POST https://places.googleapis.com/v1/places:searchText` with `textQuery`, optional `locationBias.circle`, `pageSize: 3`.
-- **Nearby Search:** `POST https://places.googleapis.com/v1/places:searchNearby` with `locationRestriction.circle` (50 m, retry 150 m), `rankPreference: "DISTANCE"`, `maxResultCount: 3`.
+- **Text Search:** `POST https://places.googleapis.com/v1/places:searchText` with `textQuery`, optional `locationBias.circle`, `pageSize: 3`, `languageCode: "en"`.
+- **Nearby Search:** `POST https://places.googleapis.com/v1/places:searchNearby` with `locationRestriction.circle` (50 m, retry 150 m), `rankPreference: "DISTANCE"`, `maxResultCount: 3`, `languageCode: "en"`.
+- `languageCode: "en"` returns names and addresses in English where Google has them. It is a request parameter, not a field, so it doesn't change the billed SKU (the field mask alone decides that).
 - **Field mask (keep it minimal):**
   `places.id,places.displayName,places.primaryType,places.types,places.location,places.formattedAddress,places.addressComponents`
 - **Never request** ratings, reviews, photos, phone numbers, websites, opening hours, price level, or similar. Those bill at the more expensive Enterprise rate.
 - Before finalizing, confirm which pricing tier this field mask bills at in Google's docs (expected: Essentials/Pro). Free monthly allowances are per SKU: 10,000 (Essentials), 5,000 (Pro), 1,000 (Enterprise).
-- **City** from `addressComponents`: `locality` → `postal_town` → `administrative_area_level_2` → `administrative_area_level_1`. **Country** name and code (`shortText`) from the `country` component.
+- **City** from `addressComponents`: `locality` → `postal_town` → `administrative_area_level_2` → `administrative_area_level_1`. **Tokyo exception:** if the country code is `JP` and `administrative_area_level_1` is "Tokyo" or "東京都", the city is "Tokyo" (Google gives Tokyo's wards, like "Shibuya", as the locality, which would split Tokyo into many cities). **Country** name and code (`shortText`) from the `country` component.
 
 ### 12.2 "Open in Google Maps" links
 Use Google's official Maps URLs format (free, no API call):
