@@ -95,7 +95,7 @@ Storing Google Places data (names, coordinates, addresses, types) in our own dat
 | Fonts | **Press Start 2P** (headings, buttons), **VT323** (body) | Loaded with `next/font/local` from font files committed to the repo (from Google Fonts, with their SIL OFL licenses) |
 | Toasts | Sonner via shadcn/8bitcn toast | Restyled to tokens |
 | Mobile drawer | shadcn **Drawer** (Vaul) | The slide-up panel on mobile |
-| Map | **MapLibre GL JS** | Low `pixelRatio` + CSS pixelated scaling |
+| Map | **MapLibre GL JS** (5.x) | Hybrid (§13.1): low `pixelRatio` + CSS pixelated scaling at world zoom, full resolution when zoomed in |
 | Map tiles | **OpenFreeMap** | Free, no account or key. Attribution required. |
 | Country shapes | **Natural Earth** admin-0 countries GeoJSON (1:110m or 1:50m) | Public domain. Visited-country fill. |
 | Pin clustering | **supercluster** | Clusters computed in JS, rendered as HTML markers (see §13.4 for why) |
@@ -453,7 +453,10 @@ Display labels: "Food", "Cafe", "Bar", "Museum", "Landmark", "Park & Nature", "S
 
 ### 13.1 Setup
 - MapLibre GL JS, full-bleed in its container.
-- **Pixel effect:** create the map with a low `pixelRatio` (start at **0.25–0.5**, one fixed value, tune after testing on real phones) and apply `image-rendering: pixelated` to the map canvas. This also makes rendering cheaper.
+- **Hybrid pixel effect:** the map has two modes, switched by zoom.
+  - **Pixel mode** (world view, below the threshold): one map pixel is a fixed **block size** of **3** CSS pixels (picked on a real phone), and `image-rendering: pixelated` is applied to the map canvas. The `pixelRatio` varies by device: it is `DPR / round(block × DPR)`, so each map pixel covers a whole number of device pixels, and it is recomputed when the device pixel ratio changes. Fill antialiasing is off. Country borders are crisp 1-map-pixel lines (a negative `line-blur` cancels MapLibre's line antialiasing; disputed borders are drawn solid, since dashes can't be made crisp). Rivers (waterway lines) are hidden; seas and lakes (water fills) stay. Any other line is a whole number of map pixels wide.
+  - **Smooth mode** (zoomed in, from the threshold): full device pixel ratio, no pixelation, fill antialiasing on, normal line widths in CSS pixels that grow with zoom, dashed disputed borders, rivers shown, and all of Positron's road layers.
+  - **Switch:** smooth at zoom ≥ the threshold of **5** (picked on a real phone), and back to pixel mode only below 4.5 (the threshold − 0.5, hysteresis). It happens when a movement ends, never mid-gesture, and snaps without animation. It uses MapLibre's `setPixelRatio` and `setPaintProperty`, never a remount or a style reload.
 - **Start view:** fit bounds to all of the user's places with padding (max zoom ~12, so a single pin isn't zoomed to street level). With no places, show the whole world.
 - Zoom controls styled as pixel buttons (+ / −), top-right, as in the sheet.
 
@@ -481,7 +484,7 @@ Display labels: "Food", "Cafe", "Bar", "Museum", "Landmark", "Park & Nature", "S
 - Tapping a pin opens a small RPG-card popup with name, category, city/country, number of visits, and "View" → `/places/[id]`.
 
 ### 13.5 Plan B
-If the pixelated map proves unworkable on real devices, fall back to the same styled map **without** pixelation, inside a retro pixel frame. Decide only after testing; record it in `DECISIONS.md`.
+~~If the pixelated map proves unworkable on real devices, fall back to the same styled map **without** pixelation, inside a retro pixel frame.~~ **Decided 2026-09-30: not used.** After testing on real devices, the hybrid map (§13.1, pixelated at world zoom, smooth when zoomed in) was chosen over Plan B. See `DECISIONS.md`.
 
 ---
 
@@ -719,7 +722,7 @@ The owner is in a rush. Target roughly **two weeks** for the core build; these a
 - Mobile drawer and bottom tab bar finalized; desktop sidebar finalized.
 - Every component passes the checklist (§16.5); contrast rules (§16.3) applied.
 - Empty and error states (§11.7).
-- Tune the map's `pixelRatio` on real phones; decide on Plan B if needed.
+- Tune the hybrid map on real phones (world-view block size, smooth threshold). Done 2026-09-30: block 3, smooth from zoom 5; Plan B not used (§13.5).
 - Manual QA checklist (§19) on phone and desktop.
 - README with setup steps (PowerShell commands).
 - **Done when:** the app matches the design sheet (with §16.9 overrides) and passes the QA checklist.
@@ -727,7 +730,7 @@ The owner is in a rush. Target roughly **two weeks** for the core build; these a
 ---
 
 ## 21. Later (out of scope for the core build)
-Passport stamps · stats page · timeline replay · saving photos to entries · importing a whole trip's photos at once (grouping by time and place) · AI vision to rank photo candidates · sound effects (off by default) · XP / levels · dark mode · lighter pixelation at close zoom · optional recovery email.
+Passport stamps · stats page · timeline replay · saving photos to entries · importing a whole trip's photos at once (grouping by time and place) · AI vision to rank photo candidates · sound effects (off by default) · XP / levels · dark mode · optional recovery email.
 
 ---
 
@@ -742,7 +745,8 @@ Passport stamps · stats page · timeline replay · saving photos to entries · 
 | Gemini free-tier limits change | Fall back to raw-text search; Claude Haiku as backup provider |
 | Simple passwords | Supabase auth rate limits on |
 | No password recovery | Clear signup warning |
-| Pixelated map unreadable on some phones | Tune `pixelRatio`; Plan B (§13.5) |
+| Pixelated map unreadable on some phones | Hybrid map: pixelated only at world zoom, full resolution when zoomed in (§13.1); block size and threshold picked on a real phone |
+| Crisp world-view borders rely on a negative `line-blur`, which MapLibre's style spec doesn't allow | MapLibre pinned at 5.x. After any MapLibre upgrade, check the world-view borders; if they break, fall back to plain 1-map-pixel lines |
 | Google bill | Budget alert, quota caps, minimal field masks, per-user rate limits |
 
 ---
@@ -762,5 +766,4 @@ Passport stamps · stats page · timeline replay · saving photos to entries · 
 ---
 
 ## 24. Open items
-- Exact `pixelRatio` value (tune in Phase 3).
 - Final Vercel subdomain (`wanderdex.vercel.app` if available).

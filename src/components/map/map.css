@@ -1,7 +1,8 @@
 /* Overworld map overrides for MapLibre's own classes. Imported after maplibre-gl.css so
    these win at equal specificity. Colors are palette tokens only (SPEC §16.2). */
 
-/* Pixel effect (SPEC §13.1): the canvas is drawn at a low pixelRatio and scaled up crisply. */
+/* Pixel mode (SPEC §13.1): the canvas is drawn at a low pixelRatio and scaled up crisply.
+   The mode switch sets data-pixelated on the map container; smooth mode leaves it off. */
 [data-pixelated] .maplibregl-canvas {
   image-rendering: pixelated;
 }
