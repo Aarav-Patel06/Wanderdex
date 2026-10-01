@@ -45,3 +45,30 @@ export function addVisit(places: MapPlace[], pin: NewPin): MapPlace[] {
 export function clusterLabel(count: number) {
   return count > 99 ? "99+" : String(count);
 }
+
+// Pins' and clusters' size in CSS px by zoom (SPEC §13.4), whole multiples of the 32px
+// sprites. The selected pin is one step (32px) up.
+export function pinSizeAt(zoom: number) {
+  return zoom >= 15 ? 96 : zoom >= 10 ? 64 : 32;
+}
+
+export function selectedPinSize(size: number) {
+  return size + 32;
+}
+
+// supercluster clusters at whole zooms, merging points within its radius in CSS px at the zoom
+// it's asked for, so asking for one zoom lower merges within twice that on screen. From zoom
+// 10, where pins and clusters are 64px or more, it's asked one lower, for twice the radius
+// (SPEC §13.4).
+export function clusterZoomAt(zoom: number) {
+  const whole = Math.floor(zoom);
+  return zoom >= 10 ? whole - 1 : whole;
+}
+
+// The map zoom that shows supercluster's zoom `clusterZoom`: where a cluster that expands at
+// that zoom shows apart.
+export function mapZoomFor(clusterZoom: number) {
+  let zoom = clusterZoom;
+  while (clusterZoomAt(zoom) < clusterZoom) zoom += 1;
+  return zoom;
+}

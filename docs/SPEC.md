@@ -479,9 +479,9 @@ Display labels: "Food", "Cafe", "Bar", "Museum", "Landmark", "Park & Nature", "S
 
 ### 13.4 Pins (important implementation detail)
 - **Pins must be HTML markers, not MapLibre symbol layers.** Everything drawn inside the map canvas gets pixelated by the low `pixelRatio`, which would destroy the 32×32 sprites. HTML markers sit above the canvas and stay crisp.
-- Cluster with **supercluster** over the user's places; recompute on `moveend`/`zoomend`; render only markers within the current viewport.
-- **Single place:** the category sprite at **32px** (CSS) with `image-rendering: pixelated`, anchored at the pin's bottom tip, and **64px** from zoom 14 up, so pins read well up close. The selected pin is one step up: **64px**, or **96px** from zoom 14. Whole multiples only (§16.5 rule 4). Every pin's tap target is at least 44px.
-- **Cluster:** `pin_group.png` at 32px (at every zoom) with a small dark badge on its top-right corner showing the count in the pixel font (cream text on `#2D201C`), capped at "99+". The sprite's white circle is too small for a number. Tapping a cluster zooms in to expand it.
+- Cluster with **supercluster** over the user's places; recompute on `moveend`/`zoomend`; render only markers within the current viewport. The cluster radius grows with the pins: 40px below zoom 10, 80px from zoom 10 (supercluster is asked for one zoom lower), so nearby pins merge into a cluster instead of piling up.
+- **Single place:** the category sprite with `image-rendering: pixelated`, anchored at the pin's bottom tip, growing with zoom so pins read well up close: **32px** below zoom 10, **64px** from zoom 10, **96px** from zoom 15. The selected pin is one step up: **64px**, **96px**, or **128px**. Whole multiples only (§16.5 rule 4). Sizes change when a movement ends, never mid-pinch. Every pin's tap target is at least 44px.
+- **Cluster:** `pin_group.png` at the same size as single pins (32, 64, or 96px by zoom; it has no selected size) with a small dark badge on its top-right corner showing the count in the pixel font (cream text on `#2D201C`), capped at "99+". The sprite's white circle is too small for a number. Tapping a cluster zooms in to expand it.
 - **One pin per place**, even with several visits.
 - Tapping a pin opens a popup: a speech-bubble pixel card on `surface` with a stepped pixel tail pointing at the pin (pointing up instead when the card has to sit below the pin). Its content is left-aligned on one edge: the name; the category line (label first, then its sprite); city/country; a full-width 1px divider in `text`; the number of visits; then a "View" button → `/places/[id]` stretched to the card's width.
 
@@ -603,7 +603,7 @@ The sheet's "VT223" is a typo for VT323. Line height ~1.2 for VT323, ~1.5 for Pr
 1. Uses only theme tokens and the two fonts.
 2. Square corners, solid offset shadow (e.g. `4px 4px 0 var(--text)`), no gradients.
 3. Tested at 375px wide; tap targets at least 44px tall.
-4. Pixel fonts and sprites only at whole-number sizes (fonts per §16.4; sprites at 1×, 2×, 3×).
+4. Pixel fonts and sprites only at whole-number sizes (fonts per §16.4; sprites at 1×, 2×, 3×, 4×).
 5. Only light CSS animations (e.g. `steps()` sprite-style motion). No heavy animation libraries. Respect `prefers-reduced-motion`.
 6. Visible keyboard focus state in pixel style (e.g. accent outline).
 
@@ -646,7 +646,7 @@ All are true pixel art at native size with no semi-transparent pixels; outline c
 | `pin_group.png` | 32×32 | Cluster pin (count goes in a corner badge) |
 | `preview_8x.png`, `preview2_8x.png` | — | Previews only; not used in the app |
 
-Always render with `image-rendering: pixelated` at whole-number multiples (32, 64, 96px). Food, Cafe, Museum, and Shopping pins are all reds and are told apart by icon only; this is accepted. Category sprites also replace photo thumbnails in cards and lists.
+Always render with `image-rendering: pixelated` at whole-number multiples (32, 64, 96, 128px). Food, Cafe, Museum, and Shopping pins are all reds and are told apart by icon only; this is accepted. Category sprites also replace photo thumbnails in cards and lists.
 
 ### 16.8 Toast behavior
 Toasts auto-dismiss after ~4 s and have a close (×) button. Copy is in §11.6 and §11.7.

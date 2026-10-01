@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 
-import { addVisit, clusterLabel, type MapPlace, placesFromVisits } from "@/lib/map/places";
+import {
+  addVisit,
+  clusterLabel,
+  clusterZoomAt,
+  type MapPlace,
+  mapZoomFor,
+  pinSizeAt,
+  placesFromVisits,
+  selectedPinSize,
+} from "@/lib/map/places";
 
 const ICHIRAN = { id: "a", name: "Ichiran Shibuya", city: "Tokyo", country: "Japan", lat: 35.66, lng: 139.7 };
 const TATE = { id: "b", name: "Tate Modern", city: "London", country: "United Kingdom", lat: 51.51, lng: -0.1 };
@@ -46,6 +55,44 @@ describe("addVisit", () => {
     expect(addVisit(places, { ...ICHIRAN, category: "bar" })).toEqual([
       { ...ICHIRAN, category: "bar", visits: 3 },
     ]);
+  });
+});
+
+describe("pin sizes", () => {
+  it.each([
+    [0, 32, 64],
+    [9.99, 32, 64],
+    [10, 64, 96],
+    [14.99, 64, 96],
+    [15, 96, 128],
+    [20, 96, 128],
+  ])("zoom %f → %ipx, selected %ipx", (zoom, size, selected) => {
+    expect(pinSizeAt(zoom)).toBe(size);
+    expect(selectedPinSize(pinSizeAt(zoom))).toBe(selected);
+  });
+});
+
+describe("cluster zoom", () => {
+  it.each([
+    [3.5, 3],
+    [9.99, 9],
+    [10, 9],
+    [10.5, 9],
+    [11, 10],
+    [15.2, 14],
+  ])("map zoom %f → cluster zoom %i", (zoom, clusterZoom) => {
+    expect(clusterZoomAt(zoom)).toBe(clusterZoom);
+  });
+
+  it.each([
+    [3, 3],
+    [9, 9],
+    [10, 11],
+    [14, 15],
+  ])("cluster zoom %i shows from map zoom %i", (clusterZoom, zoom) => {
+    expect(mapZoomFor(clusterZoom)).toBe(zoom);
+    expect(clusterZoomAt(zoom)).toBeGreaterThanOrEqual(clusterZoom);
+    expect(clusterZoomAt(zoom - 0.01)).toBeLessThan(clusterZoom);
   });
 });
 

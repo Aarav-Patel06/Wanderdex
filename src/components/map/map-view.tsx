@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { type CSSProperties, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import Image from "next/image";
@@ -24,7 +24,15 @@ import { Loading } from "@/components/loading";
 import { Button } from "@/components/ui/8bit/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/8bit/card";
 import { CATEGORIES, type Category, CATEGORY_LABELS, categorySprite } from "@/lib/categories";
-import { clusterLabel, type MapPlace, type NewPin } from "@/lib/map/places";
+import {
+  clusterLabel,
+  clusterZoomAt,
+  type MapPlace,
+  mapZoomFor,
+  type NewPin,
+  pinSizeAt,
+  selectedPinSize,
+} from "@/lib/map/places";
 import {
   BASE_STYLE_URL,
   blockAt,
@@ -57,17 +65,14 @@ const CLUSTER_RADIUS_PX = 40;
 // Pans to a new pin at least this close, so it shows as a pin rather than inside a cluster.
 const FOCUS_ZOOM = 12;
 
-// Single pins double in size from this zoom up (SPEC §13.4; the sizes are in map.css).
-const NEAR_ZOOM = 14;
-
 // The popup card's pixel tail (map.css) reaches 18px past the card; 8px more leaves room for
 // its 4px shadow plus a gap before the pin. At a corner anchor, the card shifts so the pin is
 // TAIL_INSET px in from that corner, under the tail.
 const TAIL_REACH = 26;
 const TAIL_INSET = 30;
 
-// The selected pin is anchored at its bottom tip and is pinHeight tall (64px, or 96px when
-// near). The card sits above it (bottom anchors), or below the tip when there's no room above.
+// The selected pin is anchored at its bottom tip and is pinHeight tall (selectedPinSize). The
+// card sits above it (bottom anchors), or below the tip when there's no room above.
 // popupPadding rules out the side anchors.
 function popupOffset(pinHeight: number): Offset {
   const above = -(pinHeight + TAIL_REACH);
@@ -147,7 +152,8 @@ export function MapView({
   const containerRef = useRef<HTMLDivElement>(null);
   const [map, setMap] = useState<MapLibreMap | null>(null);
   const [loaded, setLoaded] = useState(false);
-  const [near, setNear] = useState(false);
+  // Pins' and clusters' size (pinSizeAt), updated when a movement ends, so never mid-pinch.
+  const [pinSize, setPinSize] = useState(32);
   const [legendOpen, setLegendOpen] = useState(false);
   const legendId = useId();
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -204,8 +210,8 @@ export function MapView({
         // bounds would.
         map.setPadding(cameraPadding(containerRef.current));
         map.fitBounds(startBounds, { padding: FIT_PADDING, maxZoom: START_MAX_ZOOM, duration: 0 });
-        setNear(map.getZoom() >= NEAR_ZOOM);
-        map.on("zoom", () => setNear(map.getZoom() >= NEAR_ZOOM));
+        setPinSize(pinSizeAt(map.getZoom()));
+        map.on("moveend", () => setPinSize(pinSizeAt(map.getZoom())));
         map.once("load", () => setLoaded(true));
 
         // Stop zooming out once the world is as wide as the map: further out, the pixels swallow
@@ -279,7 +285,8 @@ export function MapView({
   }, [startBounds]);
 
   // HTML markers only, never symbol layers: the canvas is pixelated, markers stay crisp (SPEC §13.4).
-  // Recomputed on moveend, which zooming fires too, and only for what's in view.
+  // Recomputed on moveend, which zooming fires too, and only for what's in view. Clustered at
+  // clusterZoomAt, so the radius grows with the pins; a cluster tap zooms to where it splits.
   useEffect(() => {
     if (!map) return;
     const shown = markers.current;
@@ -288,7 +295,7 @@ export function MapView({
       const b = map.getBounds();
       const items = index.getClusters(
         [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()],
-        Math.floor(map.getZoom()),
+        clusterZoomAt(map.getZoom()),
       );
       const next = new Map<string, Marker>();
       for (const item of items) {
@@ -300,7 +307,7 @@ export function MapView({
           const element =
             "cluster" in props
               ? pinButton(`${props.point_count} places`, "/sprites/pin_group.png", clusterLabel(props.point_count), () =>
-                  map.easeTo({ center: [lng, lat], zoom: index.getClusterExpansionZoom(props.cluster_id) }),
+                  map.easeTo({ center: [lng, lat], zoom: mapZoomFor(index.getClusterExpansionZoom(props.cluster_id)) }),
                 )
               : pinButton(props.name, categorySprite(props.category), null, () => setSelectedId(props.id));
           marker = new Marker({ element, anchor: "bottom" }).setLngLat([lng, lat]).addTo(map);
@@ -338,7 +345,7 @@ export function MapView({
     if (!map || !selected) return;
     const popup = new Popup({
       closeButton: false,
-      offset: popupOffset(near ? 96 : 64),
+      offset: popupOffset(selectedPinSize(pinSize)),
       padding: popupPadding(map.getPadding()),
       maxWidth: "none",
       className: "pin-popup",
@@ -353,7 +360,7 @@ export function MapView({
       popup.off("close", onClose);
       popup.remove();
     };
-  }, [map, selected, popupNode, near]);
+  }, [map, selected, popupNode, pinSize]);
 
   useEffect(() => {
     if (!map || !focus) return;
@@ -376,8 +383,12 @@ export function MapView({
 
   return (
     <div className="absolute inset-0">
-      {/* data-pixelated is set on it by the mode switch; data-near grows the pins (map.css). */}
-      <div ref={containerRef} data-near={near || undefined} className="size-full" />
+      {/* data-pixelated is set on it by the mode switch; the pin sizes are for map.css. */}
+      <div
+        ref={containerRef}
+        style={{ "--pin-size": `${pinSize}px`, "--pin-selected": `${selectedPinSize(pinSize)}px` } as CSSProperties}
+        className="size-full"
+      />
 
       {/* Until the first full draw (same plate as the code-loading one in overworld.tsx). */}
       {!loaded && (
@@ -431,8 +442,8 @@ function startBoundsOf(places: MapPlace[]): LngLatBoundsLike {
 }
 
 // A tap target of at least 44px (SPEC §16.5) with the sprite at its bottom, so the marker's
-// bottom anchor is the pin's tip. The sizes are in map.css: single pins (.pin-place) grow when
-// selected and when zoomed in; clusters stay 32px.
+// bottom anchor is the pin's tip. The sizes are in map.css: pins and clusters take the map
+// container's --pin-size, and the selected single pin (.pin-place) --pin-selected.
 function pinButton(label: string, sprite: string, badge: string | null, onClick: () => void) {
   const button = document.createElement("button");
   button.type = "button";

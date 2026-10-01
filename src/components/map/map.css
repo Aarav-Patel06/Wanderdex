@@ -36,35 +36,25 @@
 
 /* Pins (SPEC §13.4): a button at least 44px square (SPEC §16.5) with the sprite at its bottom
    centre, so the marker's bottom anchor is the pin's tip. Sprites at whole multiples of 32px
-   only. Single pins are 32px, 64px from zoom 14 (data-near on the map container), and the
-   selected one is a step up: 64px, or 96px from zoom 14. Clusters stay 32px. */
+   only. Pins and clusters take --pin-size from the map container (32, 64, or 96px by zoom),
+   and the selected single pin (.pin-place) --pin-selected, a step up (pinSizeAt in
+   lib/map/places.ts). */
 .pin {
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  width: 44px;
-  height: 44px;
+  width: max(44px, var(--pin-size));
+  height: max(44px, var(--pin-size));
   cursor: pointer;
 }
 .pin img {
   display: block;
-  width: 32px;
-  height: 32px;
+  width: var(--pin-size);
+  height: var(--pin-size);
 }
 .pin-place[data-selected] {
+  --pin-size: var(--pin-selected);
   z-index: 10;
-}
-[data-near] .pin-place,
-[data-near] .pin-place img,
-.pin-place[data-selected],
-.pin-place[data-selected] img {
-  width: 64px;
-  height: 64px;
-}
-[data-near] .pin-place[data-selected],
-[data-near] .pin-place[data-selected] img {
-  width: 96px;
-  height: 96px;
 }
 
 /* Pin popups: our Card draws the box, so drop MapLibre's white bubble and tip. */
