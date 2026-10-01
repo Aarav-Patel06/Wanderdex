@@ -1,26 +1,44 @@
-import { errorResponse, readBody } from "@/lib/api";
+import { errorResponse, readBody, session } from "@/lib/api";
 import { timezoneAt, visitedAtUtc } from "@/lib/dates";
 import { type PlaceFields, signingSecret, verifyPlace } from "@/lib/place-signature";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
-import { newVisitSchema, PLACE_COLUMNS, type SavedVisit, VISIT_COLUMNS } from "@/lib/visits";
+import {
+  findReadablePlace,
+  isFirstInCountry,
+  isReturnVisit,
+  newVisitSchema,
+  PLACE_COLUMNS,
+  type SavedVisit,
+  VISIT_COLUMNS,
+} from "@/lib/visits";
 
-// Saves a visit from the confirmation card (SPEC §11.6 steps 1–4). The first-visit-in-country
-// check belongs to the toasts (Phase 2).
+// Saves a visit (SPEC §11.6 steps 1–5), from the confirmation card after a lookup (a signed
+// candidate) or for a place that already exists (by id), and says whether it's a return visit
+// and whether it's the user's first in its country, for the client's toasts.
 export async function POST(request: Request) {
-  const supabase = await createClient();
-  const { data: auth } = await supabase.auth.getClaims();
-  const userId = auth?.claims?.sub;
+  const { supabase, userId } = await session();
   if (!userId) return errorResponse("unauthorized");
 
   const body = await readBody(request, newVisitSchema);
   if (!body) return errorResponse("invalid_input");
 
   try {
-    // Only a place /api/resolve/* signed. Without the secret this throws, so nothing is saved.
-    const verified = verifyPlace(body.place, signingSecret());
-    if (!verified) return errorResponse("place_unverified");
-    const place = await findOrCreatePlace(verified);
+    let place: SavedVisit["place"];
+    let source: { source: "link" | "text" | "manual"; source_input: string | null };
+    if ("place_id" in body) {
+      // Nothing about the place is written, so no signature: it only has to exist and be
+      // readable by this user under RLS (Google places, or their own manual ones, SPEC §9).
+      const found = await findReadablePlace(supabase, body.place_id);
+      if (!found) return errorResponse("not_found");
+      place = found;
+      source = { source: "manual", source_input: null };
+    } else {
+      // Only a place /api/resolve/* signed. Without the secret this throws, so nothing is saved.
+      const verified = verifyPlace(body.place, signingSecret());
+      if (!verified) return errorResponse("place_unverified");
+      place = await findOrCreatePlace(verified);
+      source = { source: body.source, source_input: body.source_input };
+    }
     // From the stored place's coordinates, so every visit to a place uses the same zone.
     const timezone = timezoneAt(place.lat, place.lng);
     // The user's own client, so RLS checks that the visit is theirs (SPEC §9).
@@ -33,17 +51,32 @@ export async function POST(request: Request) {
         visited_at: visitedAtUtc(body.visited.value, body.visited.precision, timezone).toISOString(),
         visited_precision: body.visited.precision,
         timezone,
-        source: body.source,
-        source_input: body.source_input,
+        rating: body.rating,
+        note: body.note,
+        ...source,
       })
       .select(VISIT_COLUMNS)
       .single<SavedVisit["visit"]>();
     if (error) throw error;
-    return Response.json({ place, visit } satisfies SavedVisit);
+    // The visit is already saved, so a failed check only changes the toasts: a failed return
+    // check shows "New place discovered!", a failed country check skips the country toast.
+    const [returnCheck, countryCheck] = await Promise.allSettled([
+      isReturnVisit(supabase, { userId, placeId: place.id, visitId: visit.id }),
+      isFirstInCountry(supabase, { userId, visitId: visit.id, countryCode: place.country_code }),
+    ]);
+    const return_visit = settledFlag(returnCheck, "return-visit");
+    const first_in_country = settledFlag(countryCheck, "first-in-country");
+    return Response.json({ place, visit, return_visit, first_in_country } satisfies SavedVisit);
   } catch (error) {
     console.error("visits save failed:", error);
     return errorResponse("upstream_error");
   }
+}
+
+function settledFlag(result: PromiseSettledResult<boolean>, check: string) {
+  if (result.status === "fulfilled") return result.value;
+  console.error(`${check} check failed:`, result.reason);
+  return false;
 }
 
 // places is shared and the browser can't write it, so this uses the secret key. A new Google

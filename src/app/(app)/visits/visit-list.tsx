@@ -8,12 +8,14 @@ import Link from "next/link";
 import { loadVisits } from "@/app/(app)/visits/actions";
 import { errorCopy } from "@/components/add/api";
 import { Loading } from "@/components/loading";
+import { Rating } from "@/components/rating";
 import { Alert, AlertDescription } from "@/components/ui/8bit/alert";
 import { Button } from "@/components/ui/8bit/button";
 import { Card } from "@/components/ui/8bit/card";
 import { categorySprite } from "@/lib/categories";
 
 // The visits list, 30 at a time: the page renders the first 30, "Load more" appends the next.
+// A row opens its place, scrolled to that visit with a brief highlight (?visit=, SPEC §14.3).
 export function VisitList({ initial }: { initial: Awaited<ReturnType<typeof loadVisits>> }) {
   const [items, setItems] = useState(initial.items);
   const [next, setNext] = useState(initial.next);
@@ -41,7 +43,7 @@ export function VisitList({ initial }: { initial: Awaited<ReturnType<typeof load
           {items.map((visit) => (
             <li key={visit.id}>
               <Link
-                href={`/places/${visit.placeId}`}
+                href={`/places/${visit.placeId}?visit=${visit.id}`}
                 className="flex min-h-11 items-center gap-3 px-4 py-3 hover:bg-surface-dark"
               >
                 <Image
@@ -55,7 +57,10 @@ export function VisitList({ initial }: { initial: Awaited<ReturnType<typeof load
                 <span className="flex min-w-0 flex-col">
                   <span className="break-words">{visit.name}</span>
                   {visit.where && <span className="text-small">{visit.where}</span>}
-                  <span className="text-small">{visit.date}</span>
+                  <span className="flex flex-wrap items-center gap-x-4 text-small">
+                    {visit.date}
+                    {visit.rating !== null && <Rating value={visit.rating} />}
+                  </span>
                 </span>
               </Link>
             </li>

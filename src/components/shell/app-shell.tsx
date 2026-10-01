@@ -13,6 +13,7 @@ import { Plus } from "pixelarticons/react/Plus";
 import { logout } from "@/app/(app)/actions";
 import { AddVisitProvider, useAddVisitController } from "@/components/add/add-visit-context";
 import { RpgDialog } from "@/components/dialogs/rpg-dialog";
+import { useTrackNavigation } from "@/components/shell/back-button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -39,6 +40,7 @@ export function AppShell({ username, children }: { username: string; children: R
   const [leaving, startLeaving] = useTransition();
   const [spinning, setSpinning] = useState(false);
   const addVisit = useAddVisitController();
+  useTrackNavigation();
   const addPanelOpen = addVisit.open && pathname === "/";
   const initial = username.charAt(0).toUpperCase();
 

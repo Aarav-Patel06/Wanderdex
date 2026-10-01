@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatDay, initialWhen, whenValue, withDay, withTime } from "@/lib/when";
+import { formatDay, initialWhen, isComplete, whenValue, withDay, withMonth, withPrecision, withTime } from "@/lib/when";
 
 // 2026-09-30 15:45 UTC
 const NOW = new Date(Date.UTC(2026, 8, 30, 15, 45));
@@ -48,15 +48,36 @@ describe("whenValue", () => {
 
 describe("changing the date or time", () => {
   const month = initialWhen({ value: "2025-03", precision: "month" }, "UTC");
+  const date = initialWhen({ value: "2025-03-12", precision: "date" }, "UTC");
+  const exact = initialWhen({ value: "2025-03-12T19:30", precision: "datetime" }, "UTC");
 
-  it("makes the visit exact, at 12:00 when no time was known", () => {
-    expect(withDay(month, "2025-03-14")).toEqual({ day: "2025-03-14", time: "12:00", precision: "datetime" });
-    expect(withTime(month, "08:15")).toEqual({ day: "2025-03-01", time: "08:15", precision: "datetime" });
+  it("keeps the chosen precision", () => {
+    expect(whenValue(withDay(date, "2025-03-14"))).toBe("2025-03-14");
+    expect(whenValue(withMonth(month, "2024-11"))).toBe("2024-11");
+    expect(whenValue(withDay(exact, "2025-03-13"))).toBe("2025-03-13T19:30");
+    expect(whenValue(withTime(exact, "08:15"))).toBe("2025-03-12T08:15");
   });
 
-  it("keeps a known time when the day changes", () => {
-    const exact = initialWhen({ value: "2025-03-12T19:30", precision: "datetime" }, "UTC");
-    expect(whenValue(withDay(exact, "2025-03-13"))).toBe("2025-03-13T19:30");
+  it("puts a picked month on the 1st", () => {
+    expect(withMonth(date, "2024-11")).toEqual({ day: "2024-11-01", time: "", precision: "date" });
+  });
+});
+
+describe("withPrecision", () => {
+  const exact = initialWhen({ value: "2025-03-12T19:30", precision: "datetime" }, "UTC");
+
+  it("hides the unknown parts", () => {
+    expect(whenValue(withPrecision(exact, "date"))).toBe("2025-03-12");
+    expect(whenValue(withPrecision(exact, "month"))).toBe("2025-03");
+  });
+
+  it("brings a hidden time back", () => {
+    expect(whenValue(withPrecision(withPrecision(exact, "month"), "datetime"))).toBe("2025-03-12T19:30");
+  });
+
+  it("starts exact time at 12:00 when no time was known", () => {
+    const month = initialWhen({ value: "2025-03", precision: "month" }, "UTC");
+    expect(withPrecision(month, "datetime")).toEqual({ day: "2025-03-01", time: "12:00", precision: "datetime" });
   });
 });
 
@@ -64,5 +85,15 @@ describe("formatDay", () => {
   it("shows the date to its precision", () => {
     expect(formatDay(initialWhen({ value: "2025-03", precision: "month" }, "UTC"))).toBe("Mar 2025");
     expect(formatDay(initialWhen({ value: "2025-03-12", precision: "date" }, "UTC"))).toBe("Mar 12, 2025");
+  });
+});
+
+describe("isComplete", () => {
+  it("needs a time only for exact time", () => {
+    const exact = initialWhen({ value: "2025-03-12T19:30", precision: "datetime" }, "UTC");
+    expect(isComplete(exact)).toBe(true);
+    expect(isComplete(withTime(exact, ""))).toBe(false);
+    expect(isComplete(withPrecision(withTime(exact, ""), "date"))).toBe(true);
+    expect(isComplete(initialWhen({ value: "2025-03", precision: "month" }, "UTC"))).toBe(true);
   });
 });

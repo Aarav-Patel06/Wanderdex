@@ -12,6 +12,13 @@ export async function isLoggedIn() {
   return Boolean(data?.claims);
 }
 
+// The user's session client (RLS applies) and their user id, or null when logged out.
+export async function session() {
+  const supabase = await createClient();
+  const { data } = await supabase.auth.getClaims();
+  return { supabase, userId: data?.claims?.sub ?? null };
+}
+
 // The parsed JSON body, or null if it's not JSON or doesn't match the schema.
 export async function readBody<T>(request: Request, schema: z.ZodType<T>) {
   try {

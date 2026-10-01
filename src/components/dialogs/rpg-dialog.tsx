@@ -8,11 +8,13 @@ import {
   DialogDescription,
   DialogTitle,
 } from "@/components/ui/8bit/dialog";
+import { cn } from "@/lib/utils";
 
 export interface RpgChoice {
   label: string;
   // The caller closes the dialog (via onOpenChange) when a choice should close it.
   onSelect: () => void;
+  disabled?: boolean;
 }
 
 interface RpgDialogProps {
@@ -23,12 +25,27 @@ interface RpgDialogProps {
   choices: RpgChoice[];
   // Radix's focus return on close; preventDefault() keeps focus where a choice moved it.
   onCloseAutoFocus?: (event: Event) => void;
+  // Content between the description and the choices (a form, a loading or error line). It
+  // scrolls inside when the dialog is taller than the screen.
+  children?: React.ReactNode;
+  // e.g. a wider box for a form.
+  className?: string;
 }
 
 // The app's only dialog style (SPEC §3, §16.6): dark box, accent pixel border,
 // cream text, vertical choices with "▶" next to the focused one.
-// Radix handles the focus trap, Escape to close, and focusing the first choice on open.
-export function RpgDialog({ open, onOpenChange, title, description, choices, onCloseAutoFocus }: RpgDialogProps) {
+// Radix handles the focus trap, Escape to close, and focusing the first choice (or the first
+// field of its content) on open.
+export function RpgDialog({
+  open,
+  onOpenChange,
+  title,
+  description,
+  choices,
+  onCloseAutoFocus,
+  children,
+  className,
+}: RpgDialogProps) {
   const [focused, setFocused] = useState(0);
   const buttons = useRef<(HTMLButtonElement | null)[]>([]);
 
@@ -53,13 +70,20 @@ export function RpgDialog({ open, onOpenChange, title, description, choices, onC
         font="normal"
         showCloseButton={false}
         onCloseAutoFocus={onCloseAutoFocus}
-        className="gap-6 bg-text p-6 text-background ring-0 sm:max-w-md *:aria-hidden:border-accent"
-      >
-        <DialogTitle className="text-h3">{title}</DialogTitle>
-        {description && (
-          <DialogDescription className="text-body text-background">{description}</DialogDescription>
+        // Centered with inset-0 + auto margins instead of the base dialog's translate(-50%, -50%),
+        // which can land on half pixels and blur the pixel borders (fills bleed past them).
+        className={cn(
+          "inset-0 m-auto flex h-fit max-h-[calc(100dvh-2rem)] translate-x-0 translate-y-0 flex-col gap-6 bg-text p-6 text-background ring-0 sm:max-w-md *:aria-hidden:border-accent",
+          className,
         )}
-        <ul className="flex flex-col gap-1" onKeyDown={handleKeyDown}>
+      >
+        <DialogTitle className="shrink-0 text-h3">{title}</DialogTitle>
+        {description && (
+          <DialogDescription className="shrink-0 text-body text-background">{description}</DialogDescription>
+        )}
+        {/* -m/p: fields' pixel borders sit 6px outside them, inside the scroll box's clip. */}
+        {children && <div className="-m-1.5 min-h-0 overflow-y-auto p-1.5">{children}</div>}
+        <ul className="flex shrink-0 flex-col gap-1" onKeyDown={handleKeyDown}>
           {choices.map((choice, i) => (
             <li key={choice.label}>
               <button
@@ -69,7 +93,8 @@ export function RpgDialog({ open, onOpenChange, title, description, choices, onC
                 type="button"
                 onFocus={() => setFocused(i)}
                 onClick={choice.onSelect}
-                className="retro flex min-h-11 w-full items-center gap-3 text-left text-button"
+                disabled={choice.disabled}
+                className="retro flex min-h-11 w-full items-center gap-3 text-left text-button disabled:opacity-50"
               >
                 <span aria-hidden="true" className="w-4 text-accent">
                   {focused === i ? "▶︎" : ""}

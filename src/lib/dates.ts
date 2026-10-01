@@ -14,6 +14,12 @@ const LOCAL_VALUE: Record<Precision, RegExp> = {
   month: /^(\d{4})-(\d{2})$/,
 };
 
+const LOCAL_FORMAT: Record<Precision, string> = {
+  datetime: "yyyy-MM-dd'T'HH:mm",
+  date: "yyyy-MM-dd",
+  month: "yyyy-MM",
+};
+
 const DISPLAY: Record<Precision, string> = {
   datetime: "MMM d, yyyy, h:mm a",
   date: "MMM d, yyyy",
@@ -59,6 +65,12 @@ export function visitedAtUtc(value: string, precision: Precision, timeZone: stri
   if (!isLocalValue(value, precision)) throw new RangeError(`Not a ${precision} value: ${value}`);
   const local = precision === "month" ? `${value}-01T12:00` : precision === "date" ? `${value}T12:00` : value;
   return localToUtc(local, timeZone);
+}
+
+// The reverse: a stored visited_at as the local value at its precision, in the visit's zone, so
+// editing a visit starts from the wall clock it shows.
+export function localValue(visitedAt: Date | string, precision: Precision, timeZone: string) {
+  return formatInTimeZone(visitedAt, timeZone, LOCAL_FORMAT[precision]);
 }
 
 // EXIF DateTimeOriginal ("YYYY:MM:DD HH:MM:SS") → UTC (SPEC §11.2 step 5). Uses

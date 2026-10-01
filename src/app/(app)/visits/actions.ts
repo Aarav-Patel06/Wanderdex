@@ -15,6 +15,7 @@ export type VisitListItem = {
   where: string;
   category: Category;
   date: string;
+  rating: number | null;
 };
 
 type Row = {
@@ -23,6 +24,7 @@ type Row = {
   visited_at: string;
   visited_precision: Precision;
   timezone: string;
+  rating: number | null;
   place: { id: string; name: string; city: string | null; country: string | null } | null;
 };
 
@@ -34,7 +36,7 @@ export async function loadVisits(offset: number): Promise<{ items: VisitListItem
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("visits")
-    .select("id, category, visited_at, visited_precision, timezone, place:places(id, name, city, country)")
+    .select("id, category, visited_at, visited_precision, timezone, rating, place:places(id, name, city, country)")
     .order("visited_at", { ascending: false })
     // A stable order for visits at the same instant, so pages don't overlap.
     .order("id")
@@ -44,7 +46,7 @@ export async function loadVisits(offset: number): Promise<{ items: VisitListItem
     .overrideTypes<Row[], { merge: false }>();
   if (error) throw error;
 
-  const items = data.slice(0, PAGE_SIZE).flatMap(({ id, category, visited_at, visited_precision, timezone, place }) =>
+  const items = data.slice(0, PAGE_SIZE).flatMap(({ id, category, visited_at, visited_precision, timezone, rating, place }) =>
     place
       ? [
           {
@@ -54,6 +56,7 @@ export async function loadVisits(offset: number): Promise<{ items: VisitListItem
             where: [place.city, place.country].filter(Boolean).join(", "),
             category,
             date: formatVisited(visited_at, visited_precision, timezone),
+            rating,
           },
         ]
       : [],

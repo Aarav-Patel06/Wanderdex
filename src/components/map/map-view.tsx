@@ -465,9 +465,10 @@ function pinButton(label: string, sprite: string, badge: string | null, onClick:
   frame.append(img);
 
   // Cluster count badge on the sprite's top-right corner: cream pixel text on the text color.
+  // Its size grows with the pin (.pin-count in map.css).
   if (badge) {
     const count = document.createElement("span");
-    count.className = "absolute -top-1 -right-3 bg-text px-1 py-0.5 font-display text-tab text-background";
+    count.className = "pin-count absolute bg-text font-display text-background";
     count.textContent = badge;
     frame.append(count);
   }

@@ -26,14 +26,30 @@ export function initialWhen(
   return { day: `${value}-01`, time: "", precision };
 }
 
-// Picking a day or a time makes the visit exact (datetime). A day picked without a known time
-// gets 12:00, the same time date precision stores (SPEC §8).
+// Changing the day, month, or time keeps the precision the user picked (SPEC §11.5).
 export function withDay(when: When, day: string): When {
-  return { day, time: when.time || "12:00", precision: "datetime" };
+  return { ...when, day };
+}
+
+// month is "YYYY-MM"; month precision keeps the 1st (SPEC §8).
+export function withMonth(when: When, month: string): When {
+  return { ...when, day: `${month}-01` };
 }
 
 export function withTime(when: When, time: string): When {
-  return { ...when, time, precision: "datetime" };
+  return { ...when, time };
+}
+
+// The precision control. The time is kept while it's hidden, so switching back to exact time
+// brings it back; with no known time, exact time starts at 12:00, the time date precision
+// stores (SPEC §8).
+export function withPrecision(when: When, precision: Precision): When {
+  return { ...when, precision, time: precision === "datetime" ? when.time || "12:00" : when.time };
+}
+
+// A cleared exact time can't be saved; date and month precision need no time.
+export function isComplete({ time, precision }: When) {
+  return precision !== "datetime" || time !== "";
 }
 
 // The local value /api/visits takes: "YYYY-MM-DDTHH:mm", "YYYY-MM-DD", or "YYYY-MM".

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 
 import { useRouter } from "next/navigation";
 
@@ -8,27 +8,17 @@ import { useAddVisit, useAddVisitBubble } from "@/components/add/add-visit-conte
 import { type AddMode, AddPanel } from "@/components/add/add-panel";
 import { errorCopy, postJson } from "@/components/add/api";
 import { ConfirmCard, type Lookup } from "@/components/add/confirm-card";
+import { AddDrawer, ConfirmPanel } from "@/components/add/confirm-surfaces";
 import { RpgDialog } from "@/components/dialogs/rpg-dialog";
 import { useMapCover, useOverworld } from "@/components/map/overworld";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/8bit/card";
-import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/8bit/drawer";
+import { toast } from "@/components/ui/8bit/toast";
+import { useIsDesktop } from "@/components/use-is-desktop";
 import type { LinkResult, ResolveResult } from "@/lib/resolve";
+import { saveToasts } from "@/lib/save-toasts";
 import type { SavedVisit } from "@/lib/visits";
 
 import "./add.css";
-
-// Tailwind's md breakpoint, where the shell switches to the desktop sidebar.
-const DESKTOP = "(min-width: 48rem)";
-
-function subscribeDesktop(onChange: () => void) {
-  const query = matchMedia(DESKTOP);
-  query.addEventListener("change", onChange);
-  return () => query.removeEventListener("change", onChange);
-}
-
-function useIsDesktop() {
-  return useSyncExternalStore(subscribeDesktop, () => matchMedia(DESKTOP).matches, () => false);
-}
 
 // Adding a visit on the Overworld (SPEC §11, §14.2): lookup → confirmation card → save.
 // Desktop: "Add Visit" in the sidebar opens a speech bubble beside it with the add panel, and
@@ -150,7 +140,10 @@ export function AddFlow() {
 
   // Close the card (and the drawer), then show the pin: the map flies to it with the panels as
   // they are after closing. The refresh keeps the server-rendered pages in step with the save.
-  function saved({ place, visit }: SavedVisit) {
+  // Toasts: SPEC §11.6 step 6 (lib/save-toasts).
+  function saved(result: SavedVisit) {
+    const { place, visit } = result;
+    for (const { title, ...options } of saveToasts(result)) toast(title, options);
     if (open && !isDesktop) close(); // reset() runs when the drawer has slid away
     else reset();
     addPin({
@@ -180,7 +173,13 @@ export function AddFlow() {
   };
 
   const card = lookup && (
-    <ConfirmCard key={lookup.id} lookup={lookup} onCancel={() => setLookup(null)} onSaved={saved} />
+    <ConfirmCard
+      key={lookup.id}
+      lookup={lookup}
+      compact={!isDesktop}
+      onCancel={() => setLookup(null)}
+      onSaved={saved}
+    />
   );
 
   return (
@@ -210,55 +209,23 @@ export function AddFlow() {
         </section>
       )}
 
-      {/* Desktop side panel, from the top to above the attribution; it scrolls inside. Its
+      {/* Desktop side panel over the map (the attribution moves left of it, map.css). Its
           presence (data-confirm-panel) moves the map controls clear of it (map.css). */}
       {isDesktop && card && (
-        <section
-          ref={panelRef}
-          data-map-cover="right"
-          data-confirm-panel
-          aria-labelledby={`${headingId}-confirm`}
-          className="absolute top-4 right-[calc(1rem+6px)] bottom-12 flex w-96 flex-col"
-        >
-          <Card font="normal" className="flex max-h-full min-h-0 flex-col">
-            <CardHeader>
-              <CardTitle id={`${headingId}-confirm`}>Confirm visit</CardTitle>
-            </CardHeader>
-            {/* pb: the last button's pixel border and shadow reach 10px below it, which would
-                otherwise make the content scroll. */}
-            <CardContent className="min-h-0 overflow-y-auto pb-2.5">{card}</CardContent>
-          </Card>
-        </section>
+        <ConfirmPanel ref={panelRef} data-map-cover="right" data-confirm-panel className="absolute">
+          {card}
+        </ConfirmPanel>
       )}
 
-      {/* Mobile drawer. Its bottom sits on the tab bar (4rem + the safe-area inset), and it
-          never reaches past the top safe area (plus 0.5rem). Closing it resets the flow once it has slid away.
-          repositionInputs off: with the keyboard open, Vaul sets an inline height and bottom on
-          the drawer and, once the keyboard closes, restores the height it had while the input
-          was focused, so the confirmation card that replaces the input scrolls inside a
-          too-short drawer, and the drawer drops over the tab bar. Without it, iOS scrolls the
-          focused input into view itself. */}
-      <Drawer
+      {/* Mobile drawer. Closing it resets the flow once it has slid away. */}
+      <AddDrawer
         open={open && !isDesktop}
-        repositionInputs={false}
-        onOpenChange={(next) => {
-          if (!next) close();
-        }}
-        onAnimationEnd={(next) => {
-          if (!next) reset();
-        }}
+        onClose={close}
+        onClosed={reset}
+        title={card ? "Confirm visit" : "Add Anything"}
       >
-        <DrawerContent
-          font="normal"
-          aria-describedby={undefined}
-          className="add-drawer text-body data-[vaul-drawer-direction=bottom]:bottom-[calc(4rem+env(safe-area-inset-bottom))] data-[vaul-drawer-direction=bottom]:max-h-[calc(100dvh-4rem-env(safe-area-inset-bottom)-env(safe-area-inset-top)-0.5rem)]"
-        >
-          <div className="flex min-h-0 flex-col gap-4 overflow-y-auto px-4 pt-6 pb-4">
-            <DrawerTitle className="text-h3">{card ? "Confirm visit" : "Add Anything"}</DrawerTitle>
-            {card || <AddPanel layout="grid" {...panelProps} inputRef={drawerInput} />}
-          </div>
-        </DrawerContent>
-      </Drawer>
+        {card || <AddPanel layout="grid" {...panelProps} inputRef={drawerInput} />}
+      </AddDrawer>
 
       <RpgDialog
         open={unreadable !== null}

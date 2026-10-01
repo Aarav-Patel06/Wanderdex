@@ -2,7 +2,7 @@ import { type VariantProps, cva } from "class-variance-authority";
 
 import { cn } from "@/lib/utils";
 
-import { Input as ShadcnInput } from "@/components/ui/input";
+import { Textarea as ShadcnTextarea } from "@/components/ui/textarea";
 
 import "@/components/ui/8bit/styles/retro.css";
 
@@ -19,30 +19,30 @@ export const inputVariants = cva("", {
   },
 });
 
-export interface BitInputProps
-  extends React.InputHTMLAttributes<HTMLInputElement>,
+export interface BitTextareaProps
+  extends React.TextareaHTMLAttributes<HTMLTextAreaElement>,
     VariantProps<typeof inputVariants> {
   asChild?: boolean;
-  ref?: React.Ref<HTMLInputElement>;
+  ref?: React.Ref<HTMLTextAreaElement>;
 }
 
-function Input({ ...props }: BitInputProps) {
-  const { className, font } = props;
+function Textarea({ font, ...props }: BitTextareaProps) {
+  const { className } = props;
 
   return (
-    <div
-      className={cn(
-        "relative border-y-6 border-foreground dark:border-ring !p-0 flex items-center",
-        className
-      )}
-    >
-      <ShadcnInput
+    <div className={cn("relative w-full", className)}>
+      <ShadcnTextarea
         {...props}
         className={cn(
-          "rounded-none ring-0 !w-full min-h-11 bg-background text-body text-text md:text-body placeholder:text-text/70",
+          "rounded-none transition-transform ring-0 border-0 bg-background text-body text-text md:text-body placeholder:text-text/70",
           font === "retro" && "retro",
           className
         )}
+      />
+
+      <div
+        className="absolute inset-0 border-y-6 -my-1.5 border-foreground dark:border-ring pointer-events-none"
+        aria-hidden="true"
       />
 
       <div
@@ -53,4 +53,4 @@ function Input({ ...props }: BitInputProps) {
   );
 }
 
-export { Input };
+export { Textarea };

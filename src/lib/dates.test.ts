@@ -6,6 +6,7 @@ import {
   isLocalValue,
   isTimeZone,
   localToUtc,
+  localValue,
   timezoneAt,
   todayIn,
   visitedAtUtc,
@@ -141,6 +142,23 @@ describe("formatVisited", () => {
   it("formats midnight and noon", () => {
     expect(formatVisited("2025-03-12T00:05:00Z", "datetime", "UTC")).toBe("Mar 12, 2025, 12:05 AM");
     expect(formatVisited("2025-03-12T12:00:00Z", "datetime", "UTC")).toBe("Mar 12, 2025, 12:00 PM");
+  });
+});
+
+describe("localValue", () => {
+  it("gives back the value each precision was stored from, in the visit's zone", () => {
+    for (const [value, precision] of [
+      ["2025-03-12T15:45", "datetime"],
+      ["2025-03-12", "date"],
+      ["2025-03", "month"],
+    ] as const) {
+      const stored = visitedAtUtc(value, precision, "Pacific/Auckland").toISOString();
+      expect(localValue(stored, precision, "Pacific/Auckland")).toBe(value);
+    }
+  });
+
+  it("accepts the timestamp string Postgres returns", () => {
+    expect(localValue("2025-03-12T19:45:00+00:00", "datetime", "America/New_York")).toBe("2025-03-12T15:45");
   });
 });
 

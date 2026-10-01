@@ -5,7 +5,7 @@ import { VisitList } from "@/app/(app)/visits/visit-list";
 
 export const metadata: Metadata = { title: "My Visits · Wanderdex" };
 
-// My Visits, basic version (SPEC §14.3): newest visit first, 30 at a time. Filters and ratings
+// My Visits, basic version (SPEC §14.3): newest visit first, 30 at a time, with ratings. Filters
 // come in Phase 2.
 export default async function VisitsPage() {
   const first = await loadVisits(0);

@@ -20,6 +20,8 @@ export const ERROR_STATUS = {
   upstream_error: 502,
   // /api/visits: the place's signature is missing, wrong, or expired.
   place_unverified: 403,
+  // /api/visits and /api/places: no such place or visit, or not this user's (RLS).
+  not_found: 404,
 } as const;
 
 export type ResolveErrorCode = keyof typeof ERROR_STATUS;

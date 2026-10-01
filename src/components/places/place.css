@@ -1,0 +1,19 @@
+/* A visit opened from My Visits (?visit=<id>, place-detail.tsx) shows in accent for 2s, then
+   goes back (dark text on accent is about 5:1). It's a held color, not motion, so it keeps its
+   2s with reduced motion too, against the global rule that cuts animations short. */
+.visit-row[data-highlight] {
+  animation: visit-highlight 2s steps(1) forwards;
+}
+@keyframes visit-highlight {
+  from {
+    background-color: var(--accent);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .visit-row[data-highlight] {
+    animation-duration: 2s !important;
+  }
+}

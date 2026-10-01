@@ -56,6 +56,16 @@
   --pin-size: var(--pin-selected);
   z-index: 10;
 }
+/* The cluster count badge (SPEC §13.4) on the sprite's top-right corner: Press Start 2P at 8px
+   on 32px pins and 16px from 64px (zoom 10), so a multiple of 8 (SPEC §16.4). Its padding and
+   corner offset are in em, so they scale with it (8px: 2px 4px padding, 4px up, 12px out). */
+.pin-count {
+  top: -0.5em;
+  right: -1.5em;
+  padding: 0.25em 0.5em;
+  font-size: min(16px, var(--pin-size) / 4);
+  line-height: 1.5;
+}
 
 /* Pin popups: our Card draws the box, so drop MapLibre's white bubble and tip. */
 .pin-popup .maplibregl-popup-content {
@@ -94,13 +104,21 @@
 }
 
 /* The desktop confirmation panel (SPEC §14.2) covers the map's right edge while it's open, so
-   the zoom buttons and the legend move left of it: the panel's 24rem plus its 1rem margin, its
-   6px outside border, and a gap. */
+   the zoom buttons and the legend move left of it: the panel's width (--confirm-width, add.css)
+   plus its 1rem margin, its 6px outside border, and a gap. */
 .overworld {
   --map-right: 0px;
 }
 @media (min-width: 48rem) {
   .overworld:has([data-confirm-panel]) {
-    --map-right: calc(25rem + 8px);
+    --map-right: calc(var(--confirm-width) + 1rem + 8px);
+  }
+  /* The attribution moves left of the panel too (like the zoom buttons), so the panel can run
+     down to the bottom of the map. Away from the edge it needs its right border. */
+  .overworld:has([data-confirm-panel]) .maplibregl-ctrl-bottom-right {
+    right: calc(1rem + var(--map-right) + env(safe-area-inset-right));
+  }
+  .overworld:has([data-confirm-panel]) .maplibregl-ctrl.maplibregl-ctrl-attrib {
+    border-right: 4px solid var(--text);
   }
 }

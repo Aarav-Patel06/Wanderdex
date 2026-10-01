@@ -62,7 +62,7 @@ Storing Google Places data (names, coordinates, addresses, types) in our own dat
 | Add modes | Three separate modes: Paste Link, Upload Photo, Type Location |
 | Partial dates | Allowed (`datetime`, `date`, `month`), stored with a precision flag |
 | Displayed time zone | The place's local time zone |
-| Save flow | Save from the confirmation card, then a "New place discovered!" toast. No extra confirm dialog on save. |
+| Save flow | Save from the confirmation card, then a "New place discovered!" toast ("Return visit!" for a place the user already has visits at). No extra confirm dialog on save. |
 | Dialog style | **Every** dialog in the app uses the RPG style |
 | Text parsing AI | Gemini Flash-Lite (free tier). Fallback: Claude Haiku if free limits become a problem. |
 | Categories | Fixed list of 10 (§12.5), no custom categories |
@@ -128,7 +128,9 @@ Next.js server (Vercel)
  ├─ /api/resolve/link    → expand link, parse, Google Text Search
  ├─ /api/resolve/text    → Gemini parse, Google Text Search
  ├─ /api/resolve/nearby  → Google Nearby Search (photo GPS / manual pin)
- ├─ /api/visits (save)   → upsert place (secret key) + insert visit
+ ├─ /api/visits (save)   → upsert place (secret key) or reuse one by id, + insert visit
+ ├─ /api/visits/[id]    → edit / delete one visit (session client, RLS)
+ ├─ /api/places/[id]/category → the user's category for a place (their visits only)
  └─ /api/health          → trivial DB query (keep-alive target)
         │
         ├─► Supabase Postgres (profiles, places, visits, resolve_log)
@@ -356,20 +358,23 @@ Reachable from every mode ("Can't find it? Drop a pin"). The user taps a spot on
 ### 11.5 Confirmation card
 Shown after any successful lookup:
 - **Candidates:** up to 3, each with category sprite, name, and city/country. The first is preselected; one tap switches.
-- **Date & time:** pre-filled (from the photo, the parsed text, or now), with a precision control: exact time / date only / month only.
+- **Date & time:** pre-filled (from the photo, the parsed text, or now), with a precision control: exact time / date only / month only, a segmented toggle that starts at the parsed precision (exact time when it defaults to now). Date only hides the time; month only picks just a month and year. Changing the date or time keeps the chosen precision. Saved per §8.
 - **Category:** auto-set from Google types (§12.5), editable (dropdown of the 10).
-- **Rating:** optional 1–10 selector. Desktop: one row of 10. **Mobile: two rows of 5** (ten 44px tap targets don't fit across 375px).
-- **Note:** optional, up to 2000 characters.
+- **Rating:** optional 1–10 selector, 44px cells. Desktop: one row of 10. **Mobile: two rows of 5** (ten 44px tap targets don't fit across 375px). Tapping the chosen number again clears it.
+- **Note:** optional, up to 2000 characters. It starts one line tall and grows as you type; a character count shows near the limit.
+- **Phones:** Rating and Note start collapsed behind an "Add rating & note" button, which shows both in place, so the card fits (§14.2) and a plain save stays one tap. Desktop shows them from the start.
 - **Buttons:** "Save visit" (primary), "Cancel" (secondary), and a "Can't find it? Drop a pin" link.
 
 ### 11.6 Saving (`/api/visits`)
-1. Re-validate input on the server (zod), and check the place's signature: every candidate from `/api/resolve/*` is signed on the server (HMAC-SHA256 with `RESOLVE_SIGNING_SECRET`) over all the place fields the save uses, with a 24-hour expiry. A missing, wrong, or expired signature saves nothing and shows "The map spirits aren't answering. Try again." Only the user's choices (category, date/time, precision) are unsigned. Without the secret, lookups and saves fail. Manual places (§11.4) aren't from a lookup and skip the signature.
-2. Upsert the place by `google_place_id` with the secret key (insert if new, otherwise reuse).
+1. Re-validate input on the server (zod), and check the place's signature: every candidate from `/api/resolve/*` is signed on the server (HMAC-SHA256 with `RESOLVE_SIGNING_SECRET`) over all the place fields the save uses, with a 24-hour expiry. A missing, wrong, or expired signature saves nothing and shows "The map spirits aren't answering. Try again." Only the user's choices (category, date/time, precision, rating, note) are unsigned. Rating is a whole number 1–10 or none; the note is trimmed, at most 2000 characters, and an empty note is none. Without the secret, lookups and saves fail.
+   - **Existing place, by id:** a save may instead name a place that already exists by its `id` (place detail's "Add another visit", §14.4, and manual places, §11.4). Nothing about the place is written, so there's no signature: the server only checks that the place exists and that the user can read it under RLS (§9), using the user's session. These visits are saved with source `manual` and no `source_input`.
+2. Upsert the place by `google_place_id` with the secret key (insert if new, otherwise reuse). A save by id skips this.
 3. Compute `timezone` from coordinates and `visited_at` in UTC.
 4. Insert the visit with the chosen category.
-5. Check whether this is the user's **first visit in this country** (no earlier visits with the same `country_code`).
+5. Check whether this is the user's **first visit in this country** (no other visit of theirs with the same `country_code`, not counting the one just inserted). A place without a `country_code` never counts. The response says so with a flag. A second flag says whether it's a **return visit**: the user already had another visit at this place, from any path (including pasting a link for a place they've logged before).
 6. The client shows:
-   - Always: toast "New place discovered!" / "<name> added to your Wanderdex."
+   - A new place: toast "New place discovered!" / "<name> added to your Wanderdex."
+   - A return visit, instead: toast "Return visit!" / "Another visit to <name> logged."
    - Also, if first in country: toast "First visit to a new country!" / "You visited <country> for the first time!"
 7. The new pin appears on the Overworld and the map pans to it.
 
@@ -481,7 +486,7 @@ Display labels: "Food", "Cafe", "Bar", "Museum", "Landmark", "Park & Nature", "S
 - **Pins must be HTML markers, not MapLibre symbol layers.** Everything drawn inside the map canvas gets pixelated by the low `pixelRatio`, which would destroy the 32×32 sprites. HTML markers sit above the canvas and stay crisp.
 - Cluster with **supercluster** over the user's places; recompute on `moveend`/`zoomend`; render only markers within the current viewport. The cluster radius grows with the pins: 40px below zoom 10, 80px from zoom 10 (supercluster is asked for one zoom lower), so nearby pins merge into a cluster instead of piling up.
 - **Single place:** the category sprite with `image-rendering: pixelated`, anchored at the pin's bottom tip, growing with zoom so pins read well up close: **32px** below zoom 10, **64px** from zoom 10, **96px** from zoom 15. The selected pin is one step up: **64px**, **96px**, or **128px**. Whole multiples only (§16.5 rule 4). Sizes change when a movement ends, never mid-pinch. Every pin's tap target is at least 44px.
-- **Cluster:** `pin_group.png` at the same size as single pins (32, 64, or 96px by zoom; it has no selected size) with a small dark badge on its top-right corner showing the count in the pixel font (cream text on `#2D201C`), capped at "99+". The sprite's white circle is too small for a number. Tapping a cluster zooms in to expand it.
+- **Cluster:** `pin_group.png` at the same size as single pins (32, 64, or 96px by zoom; it has no selected size) with a small dark badge on its top-right corner showing the count in the pixel font (cream text on `#2D201C`), capped at "99+". The count is 8px on 32px pins and 16px from zoom 10, and the badge grows with it. The sprite's white circle is too small for a number. Tapping a cluster zooms in to expand it.
 - **One pin per place**, even with several visits.
 - Tapping a pin opens a popup: a speech-bubble pixel card on `surface` with a stepped pixel tail pointing at the pin (pointing up instead when the card has to sit below the pin). Its content is left-aligned on one edge: the name; the category line (label first, then its sprite); city/country; a full-width 1px divider in `text`; the number of visits; then a "View" button → `/places/[id]` stretched to the card's width.
 
@@ -521,15 +526,18 @@ Display labels: "Food", "Cafe", "Bar", "Museum", "Landmark", "Park & Nature", "S
 - Sorted by `visited_at` descending (most recent visit first).
 - Filters: **category** chips (All + 10 categories; on narrow screens show the first few + a "More" dropdown, as in the sheet), **city**, **country**, **date range**.
 - Each row: category sprite (where the sheet shows photos), place name, city/country, rating (if any), date formatted to its precision.
-- Tapping a row → `/places/[id]`, scrolled to that visit.
+- Tapping a row → `/places/[id]`, scrolled to that visit, which is briefly highlighted.
 - Load 30 at a time ("Load more" or infinite scroll).
 
 ### 14.4 Place detail (`/places/[id]`)
-- Header: category sprite, name, address, city/country, category (editable → updates all of the user's visits for this place), **"Open in Google Maps"** button.
-- The user's visits here, newest first, each with date (to its precision), rating, and note.
-- Each visit is **editable** (date, precision, rating, note) in an RPG-styled edit dialog, and **deletable** with the RPG confirm dialog: "Delete this visit? This can't be undone." Delete / Cancel.
-- "Add another visit" button: opens the confirmation card pre-filled with this place.
-- If the user deletes their last visit here, return to `/visits`.
+- **Header:** category sprite (64px), name, address, city/country, the user's category for this place (a dropdown of the 10; changing it updates all of the user's visits for this place, §8, so their pin uses it), and an **"Open in Google Maps"** button (§12.2).
+- The user's visits here, newest first, each with its date (to its precision, in the visit's time zone), rating (if any), and note.
+- Each visit is **editable** (date, precision, rating, note) in an RPG-styled edit dialog with the confirmation card's controls and rules (§11.5), in the visit's stored time zone; the category is the header's. Each is **deletable** with the RPG confirm dialog: "Delete this visit? This can't be undone." Delete / Cancel. The place row is never deleted (§8).
+- **"Add another visit"** button: opens the confirmation card on this page (desktop: side panel on the right; phones: the drawer), with this place as the only candidate and its current category. It saves by the place's id (§11.6).
+- If the user deletes their last visit here, go to `/visits`.
+- If the place doesn't exist, the user can't read it, or they have no visits there: an RPG-style "not found" box with a link back to My Visits.
+- **Phones:** a Back button at the top (to the previous page, or My Visits when the app opened on this page). **Desktop:** content sits to the right of the floating sidebar.
+- Edits, deletes, and category changes go through server routes that check the session, validate with zod, and use the user's session client, so RLS applies (§9, §17).
 
 ### 14.5 Login / Sign up
 As in the sheet (logo, "WANDERDEX", tagline "Collect places. Build your world."), minus email fields and "Forgot password?" (§10).
@@ -537,7 +545,7 @@ As in the sheet (logo, "WANDERDEX", tagline "Collect places. Build your world.")
 ---
 
 ## 15. Game touches (core build only)
-1. **"New place discovered!"** success toast on every save.
+1. **"New place discovered!"** success toast on every save of a new place; **"Return visit!"** for a place the user already has visits at.
 2. **"First visit to a new country!"** toast on a first-in-country save.
 3. **RPG-style dialogs** for every dialog (logout, delete, edits, errors that need acknowledgment).
 4. **Game-style copy** in empty and error states (§11.7).
@@ -649,7 +657,7 @@ All are true pixel art at native size with no semi-transparent pixels; outline c
 Always render with `image-rendering: pixelated` at whole-number multiples (32, 64, 96, 128px). Food, Cafe, Museum, and Shopping pins are all reds and are told apart by icon only; this is accepted. Category sprites also replace photo thumbnails in cards and lists.
 
 ### 16.8 Toast behavior
-Toasts auto-dismiss after ~4 s and have a close (×) button. Copy is in §11.6 and §11.7.
+Toasts auto-dismiss after ~4 s and have a close (×) button. Copy is in §11.6 and §11.7. They appear at the top; when a save shows two, both are fully visible, "New place discovered!" (or "Return visit!") first. On phones they sit left of the Overworld's avatar button, so they cover neither it nor the tab bar.
 
 ### 16.9 Where the design sheet is overridden
 1. No email field, no "Email or username", no "Forgot password?" link.

@@ -1,3 +1,10 @@
+/* The desktop confirmation panel (confirm-surfaces.tsx, SPEC §14.2) is 30rem, room for the
+   rating's row of ten 44px cells, but never reaches the sidebar (16px + 20rem, a 1rem gap, and
+   both 6px borders), so on narrow windows it shrinks and the rating wraps to two rows. */
+:root {
+  --confirm-width: min(30rem, 100vw - 23rem - 12px);
+}
+
 /* The mobile add drawer (add-flow.tsx) ends on top of the tab bar. Vaul paints the drawer's
    background 200% further down (a ::after that covers overshoot while dragging), which would
    hide the tab bar. Vaul's rule is unlayered, so this needs to be too, and more specific. */

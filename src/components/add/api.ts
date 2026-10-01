@@ -22,14 +22,21 @@ export type ApiResult<T> =
   // name: the name a link error carries (or null), for Type Location.
   | { ok: false; error: ResolveErrorCode; name: string | null };
 
-// POSTs JSON to one of our route handlers. A network failure, or a response that isn't one of
-// our JSON errors, counts as upstream_error.
-export async function postJson<T>(url: string, body: unknown): Promise<ApiResult<T>> {
+export function postJson<T>(url: string, body: unknown) {
+  return sendJson<T>("POST", url, body);
+}
+
+// Sends JSON (if there's a body) to one of our route handlers. A network failure, or a response
+// that isn't one of our JSON errors, counts as upstream_error.
+export async function sendJson<T>(
+  method: "POST" | "PATCH" | "DELETE",
+  url: string,
+  body?: unknown,
+): Promise<ApiResult<T>> {
   try {
     const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      method,
+      ...(body !== undefined && { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
     });
     const json = await res.json();
     if (res.ok) return { ok: true, data: json as T };

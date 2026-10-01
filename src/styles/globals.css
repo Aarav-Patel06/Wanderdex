@@ -147,6 +147,19 @@
   outline-offset: 2px;
 }
 
+/* Sonner's mobile layout makes the toast list 100% wide and each toast as wide as that minus
+   twice the left offset, so an uneven right offset (components/ui/sonner.tsx) would be
+   ignored. Here the list spans from the left offset to the right one instead. :root outranks
+   sonner's own rules, wherever its style tag lands. */
+@media (max-width: 600px) {
+  :root [data-sonner-toaster] {
+    width: auto;
+  }
+  :root [data-sonner-toaster] [data-sonner-toast] {
+    width: 100%;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
