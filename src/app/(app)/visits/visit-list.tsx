@@ -13,10 +13,18 @@ import { Alert, AlertDescription } from "@/components/ui/8bit/alert";
 import { Button } from "@/components/ui/8bit/button";
 import { Card } from "@/components/ui/8bit/card";
 import { categorySprite } from "@/lib/categories";
+import type { VisitFilters } from "@/lib/visit-filters";
 
-// The visits list, 30 at a time: the page renders the first 30, "Load more" appends the next.
-// A row opens its place, scrolled to that visit with a brief highlight (?visit=, SPEC §14.3).
-export function VisitList({ initial }: { initial: Awaited<ReturnType<typeof loadVisits>> }) {
+// The visits list, 30 at a time: the page renders the first 30 matching the filters, "Load
+// more" appends the next. A row opens its place, scrolled to that visit with a brief highlight
+// (?visit=, SPEC §14.3).
+export function VisitList({
+  filters,
+  initial,
+}: {
+  filters: VisitFilters;
+  initial: Awaited<ReturnType<typeof loadVisits>>;
+}) {
   const [items, setItems] = useState(initial.items);
   const [next, setNext] = useState(initial.next);
   const [error, setError] = useState(false);
@@ -27,7 +35,7 @@ export function VisitList({ initial }: { initial: Awaited<ReturnType<typeof load
     setError(false);
     startLoading(async () => {
       try {
-        const page = await loadVisits(next);
+        const page = await loadVisits(filters, next);
         setItems((current) => [...current, ...page.items]);
         setNext(page.next);
       } catch {

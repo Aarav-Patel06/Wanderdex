@@ -67,6 +67,17 @@ export function visitedAtUtc(value: string, precision: Precision, timeZone: stri
   return localToUtc(local, timeZone);
 }
 
+// The first instant of a local day ("YYYY-MM-DD") in a zone. Where a clock change skips
+// midnight (America/Santiago in September) or the whole day (Pacific/Apia, 2011-12-30),
+// date-fns-tz lands on an earlier local day; the day then starts when the clock jumps, which
+// is as far ahead as the wall clock is behind.
+export function startOfLocalDay(day: string, timeZone: string) {
+  const guess = fromZonedTime(`${day}T00:00`, timeZone);
+  const local = formatInTimeZone(guess, timeZone, "yyyy-MM-dd'T'HH:mm:ss.SSS");
+  const behind = Date.parse(`${day}T00:00Z`) - Date.parse(`${local}Z`);
+  return behind > 0 ? new Date(guess.getTime() + behind) : guess;
+}
+
 // The reverse: a stored visited_at as the local value at its precision, in the visit's zone, so
 // editing a visit starts from the wall clock it shows.
 export function localValue(visitedAt: Date | string, precision: Precision, timeZone: string) {

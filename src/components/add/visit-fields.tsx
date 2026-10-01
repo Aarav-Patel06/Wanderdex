@@ -47,9 +47,10 @@ const RATINGS = Array.from({ length: 10 }, (_, index) => String(index + 1));
 // Segmented toggle groups (precision, rating): cells share 4px dark lines. The group draws the
 // top and left edges and each cell its right and bottom ones, so a cell's box, border
 // included, is the 44px tap target (SPEC §16.5). Chosen = accent with dark text, like the
-// candidates. No press movement: a cell would slide over its neighbour.
-const segmented = "grid w-full items-stretch gap-0 border-t-4 border-l-4 border-text";
-const segment =
+// candidates. No press movement: a cell would slide over its neighbour. Also My Visits' date
+// range (From / To).
+export const segmented = "grid w-full items-stretch gap-0 border-t-4 border-l-4 border-text";
+export const segment =
   "h-11 min-w-0 border-r-4 border-b-4 border-text bg-background px-1 text-text hover:bg-surface-dark data-[state=on]:bg-accent data-[state=on]:hover:bg-accent focus-visible:ring-0 active:translate-x-0 active:translate-y-0";
 
 // Date & time with its precision control, as local wall-clock values in `timeZone`, the place's.

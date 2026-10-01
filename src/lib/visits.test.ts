@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { describe, expect, it } from "vitest";
 
 import {
+  alignCategory,
   categoryChangeSchema,
   findReadablePlace,
   idSchema,
@@ -184,6 +185,7 @@ function fakeClient(result: { count?: number | null; data?: unknown; error: unkn
   const builder = {
     from: (...args: unknown[]) => (calls.push(["from", ...args]), builder),
     select: (...args: unknown[]) => (calls.push(["select", ...args]), builder),
+    update: (...args: unknown[]) => (calls.push(["update", ...args]), builder),
     eq: (...args: unknown[]) => (calls.push(["eq", ...args]), builder),
     neq: (...args: unknown[]) => (calls.push(["neq", ...args]), builder),
     maybeSingle: () => (calls.push(["maybeSingle"]), builder),
@@ -292,5 +294,27 @@ describe("isReturnVisit", () => {
   it("throws on a query error", async () => {
     const { client } = fakeClient({ count: null, error: new Error("boom") });
     await expect(isReturnVisit(client, visit)).rejects.toThrow("boom");
+  });
+});
+
+describe("alignCategory (one category per user per place)", () => {
+  const save = { userId: "user-1", placeId: PLACE_ID, category: "bar" as const };
+
+  it("moves the user's visits at the place that are in another category to the chosen one", async () => {
+    const { client, calls } = fakeClient({ error: null });
+    await alignCategory(client, save);
+    // Only this user's visits at this place, and only the ones that differ.
+    expect(calls).toEqual([
+      ["from", "visits"],
+      ["update", { category: "bar" }],
+      ["eq", "user_id", "user-1"],
+      ["eq", "place_id", PLACE_ID],
+      ["neq", "category", "bar"],
+    ]);
+  });
+
+  it("throws on a query error, so the save stops before inserting", async () => {
+    const { client } = fakeClient({ error: new Error("boom") });
+    await expect(alignCategory(client, save)).rejects.toThrow("boom");
   });
 });

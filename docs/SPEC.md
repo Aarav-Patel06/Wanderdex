@@ -272,7 +272,7 @@ create table resolve_log (
 create index resolve_log_user_time_idx on resolve_log (user_id, created_at desc);
 ```
 
-**Why `category` is on `visits`:** `places` is shared across users, so one user's category edit must not change it for everyone. `places.category` is the auto-detected default; each visit copies it at creation. When a user edits the category on a place detail page, update **all of that user's visits for that place**, so their pin stays consistent. The pin uses that category.
+**Why `category` is on `visits`:** `places` is shared across users, so one user's category edit must not change it for everyone. `places.category` is the auto-detected default; each visit copies it at creation. **One category per user per place:** when a user edits the category on a place detail page, update **all of that user's visits for that place**, so their pin stays consistent. The pin uses that category. The same applies when a save adds a visit at a place where the user already has visits (by id, or a signed lookup of a place they've logged) in a different category: all of their visits there take the new one (§11.6 step 4).
 
 **Dates:**
 - `visited_at` is stored in UTC, computed from the local time plus `timezone`.
@@ -370,7 +370,7 @@ Shown after any successful lookup:
    - **Existing place, by id:** a save may instead name a place that already exists by its `id` (place detail's "Add another visit", §14.4, and manual places, §11.4). Nothing about the place is written, so there's no signature: the server only checks that the place exists and that the user can read it under RLS (§9), using the user's session. These visits are saved with source `manual` and no `source_input`.
 2. Upsert the place by `google_place_id` with the secret key (insert if new, otherwise reuse). A save by id skips this.
 3. Compute `timezone` from coordinates and `visited_at` in UTC.
-4. Insert the visit with the chosen category.
+4. Insert the visit with the chosen category. Just before, if the user already has visits at this place in another category, update them to the chosen one (one category per user per place, §8); if that update fails, nothing is saved.
 5. Check whether this is the user's **first visit in this country** (no other visit of theirs with the same `country_code`, not counting the one just inserted). A place without a `country_code` never counts. The response says so with a flag. A second flag says whether it's a **return visit**: the user already had another visit at this place, from any path (including pasting a link for a place they've logged before).
 6. The client shows:
    - A new place: toast "New place discovered!" / "<name> added to your Wanderdex."
@@ -524,10 +524,15 @@ Display labels: "Food", "Cafe", "Bar", "Museum", "Landmark", "Park & Nature", "S
 
 ### 14.3 My Visits (`/visits`)
 - Sorted by `visited_at` descending (most recent visit first).
-- Filters: **category** chips (All + 10 categories; on narrow screens show the first few + a "More" dropdown, as in the sheet), **city**, **country**, **date range**.
+- Filters, laid out as in the sheet: a row of **category** chips, then a row of compact **City**, **Country**, and **Date** controls, and a "Clear filters" action whenever any filter is set. Fits 375px with no horizontal scrolling.
+  - **Category chips:** "All" + the 10 categories (§12.5), multi-select. "All" means no category filter: choosing it clears the others, and turning off the last category turns it back on. Chosen chips are `accent` with dark text, like the add flow's choices; at least 44px tall. Below 640px: All, Food, Cafe + a "More" dropdown with the other 8 (as in the sheet); wider: every chip, wrapping.
+  - **City / Country:** dropdowns of the user's own distinct values, plus "All cities" / "All countries". With a country chosen, the city list shows only that country's cities, and a chosen city that isn't one of them is cleared.
+  - **Date:** opens a popover with From and To on one calendar (§16.6); either end can be left open ("Any"). Matches by precision, in each visit's own time zone: a month-only visit matches if any day of its month is in the range, a date-only visit if its day is, an exact-time visit by its local date.
+  - Filtering runs on the server under the user's session (RLS), keeps the sort and "Load more", and lives in the URL query (`?category=food,cafe&country=…&city=…&from=YYYY-MM-DD&to=YYYY-MM-DD`), so reload and Back keep it.
+  - No matches: "No visits match these filters." (§11.7) with a Clear filters button.
 - Each row: category sprite (where the sheet shows photos), place name, city/country, rating (if any), date formatted to its precision.
 - Tapping a row → `/places/[id]`, scrolled to that visit, which is briefly highlighted.
-- Load 30 at a time ("Load more" or infinite scroll).
+- Load 30 at a time, with a "Load more" button.
 
 ### 14.4 Place detail (`/places/[id]`)
 - **Header:** category sprite (64px), name, address, city/country, the user's category for this place (a dropdown of the 10; changing it updates all of the user's visits for this place, §8, so their pin uses it), and an **"Open in Google Maps"** button (§12.2).
@@ -568,7 +573,7 @@ Nothing else (no sounds, XP, levels, or stamps) in the core build.
 | `surface` | `#E7D8B7` | Cards, panels (the sheet's `#E7D087` was garbled) |
 | `surface-dark` | `#C9B995` | Darker surfaces; road color on the map |
 | `text` | `#2D201C` | Main text. Matches the sprite outline color. |
-| `primary` | `#C84F3D` | Primary buttons, selected chips, links |
+| `primary` | `#C84F3D` | Primary buttons, links |
 | `accent` | `#E57A2E` | Highlights, RPG dialog border, ghost button underline |
 | `success` | `#4CAF68` | Success toasts |
 | `error` | `#D65465` | Errors (kept pinker than primary so errors don't look like buttons) |
@@ -623,7 +628,7 @@ The sheet's "VT223" is a typo for VT323. Line height ~1.2 for VT323, ~1.5 for Pr
 | Button (ghost) | 8bitcn Button (ghost): dark text, accent underline |
 | Text input / textarea | 8bitcn Input / Textarea |
 | Dropdown | 8bitcn Select |
-| Filter chips | 8bitcn Toggle Group (selected = `primary`) |
+| Filter chips | 8bitcn Toggle Group (selected = `accent` with dark text, like the add flow's choices) |
 | Rating selector 1–10 | Toggle Group of 10 small buttons (2×5 on mobile) |
 | Card | 8bitcn Card on `surface` |
 | RPG dialog | 8bitcn Dialog: dark `#2D201C` box, accent pixel border, cream text, "▶" marker on the focused choice |
@@ -672,6 +677,7 @@ Toasts auto-dismiss after ~4 s and have a close (×) button. Copy is in §11.6 a
 10. The app name is Wanderdex, not "Travel Passport".
 11. The desktop sidebar follows the RPG dialog style (dark box, accent pixel border, cream text, "▶" cursor) and floats over the map, instead of the sheet's flush dark panel (§14.1).
 12. Desktop: Add Visit is a subitem of Overworld, above My Visits, and opens the add panel as a speech bubble beside the sidebar, instead of the sheet's "Add Anything" panel docked along the bottom of the map (§14.1, §14.2).
+13. Selected filter chips on My Visits are `accent` with dark text, like the add flow's choices, instead of the sheet's red (§14.3, §16.6).
 
 ---
 

@@ -3,6 +3,7 @@ import { timezoneAt, visitedAtUtc } from "@/lib/dates";
 import { type PlaceFields, signingSecret, verifyPlace } from "@/lib/place-signature";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
+  alignCategory,
   findReadablePlace,
   isFirstInCountry,
   isReturnVisit,
@@ -39,6 +40,10 @@ export async function POST(request: Request) {
       place = await findOrCreatePlace(verified);
       source = { source: body.source, source_input: body.source_input };
     }
+    // One category per user per place (SPEC §8): the user's earlier visits here take the one
+    // chosen now. Before the insert, so a failed update saves nothing and a retry can't
+    // duplicate the visit.
+    await alignCategory(supabase, { userId, placeId: place.id, category: body.category });
     // From the stored place's coordinates, so every visit to a place uses the same zone.
     const timezone = timezoneAt(place.lat, place.lng);
     // The user's own client, so RLS checks that the visit is theirs (SPEC §9).

@@ -141,6 +141,23 @@ export async function visitsAt(
   return count ?? 0;
 }
 
+// One category per user per place (SPEC §8): moves the user's visits at a place that are in
+// another category to `category`, the same as the place page's category edit. A save calls it
+// before inserting, so a new visit in a new category recategorizes the earlier ones. Under the
+// user's own client, so RLS limits it to their visits (SPEC §9); user_id is filtered too.
+export async function alignCategory(
+  supabase: SupabaseClient,
+  { userId, placeId, category }: { userId: string; placeId: string; category: Category },
+) {
+  const { error } = await supabase
+    .from("visits")
+    .update({ category })
+    .eq("user_id", userId)
+    .eq("place_id", placeId)
+    .neq("category", category);
+  if (error) throw error;
+}
+
 // True when the user already had a visit at this place before the one just saved, from any
 // path (a link to a place they've logged, or "Add another visit"): "Return visit!" instead of
 // "New place discovered!" (SPEC §11.6 step 6).

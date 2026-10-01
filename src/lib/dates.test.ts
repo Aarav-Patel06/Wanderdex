@@ -7,6 +7,7 @@ import {
   isTimeZone,
   localToUtc,
   localValue,
+  startOfLocalDay,
   timezoneAt,
   todayIn,
   visitedAtUtc,
@@ -159,6 +160,43 @@ describe("localValue", () => {
 
   it("accepts the timestamp string Postgres returns", () => {
     expect(localValue("2025-03-12T19:45:00+00:00", "datetime", "America/New_York")).toBe("2025-03-12T15:45");
+  });
+});
+
+describe("startOfLocalDay", () => {
+  it("is local midnight on an ordinary day", () => {
+    expect(iso(startOfLocalDay("2025-03-12", "Asia/Tokyo"))).toBe("2025-03-11T15:00:00.000Z");
+    expect(iso(startOfLocalDay("2025-03-12", "America/New_York"))).toBe("2025-03-12T04:00:00.000Z");
+    expect(iso(startOfLocalDay("2025-03-12", "UTC"))).toBe("2025-03-12T00:00:00.000Z");
+  });
+
+  it("handles the extreme offsets, +14 and -12", () => {
+    expect(iso(startOfLocalDay("2025-03-01", "Pacific/Kiritimati"))).toBe("2025-02-28T10:00:00.000Z");
+    expect(iso(startOfLocalDay("2025-03-01", "Etc/GMT+12"))).toBe("2025-03-01T12:00:00.000Z");
+  });
+
+  it("is midnight on a DST day that changes the clock later (New York springs forward at 2:00)", () => {
+    expect(iso(startOfLocalDay("2025-03-09", "America/New_York"))).toBe("2025-03-09T05:00:00.000Z");
+    expect(iso(startOfLocalDay("2025-11-02", "America/New_York"))).toBe("2025-11-02T04:00:00.000Z");
+  });
+
+  it("starts when the clock jumps on a day with no midnight (Santiago: 00:00 -04 → 01:00 -03)", () => {
+    const start = startOfLocalDay("2025-09-07", "America/Santiago");
+    expect(iso(start)).toBe("2025-09-07T04:00:00.000Z");
+    expect(formatVisited(start, "datetime", "America/Santiago")).toBe("Sep 7, 2025, 1:00 AM");
+    expect(formatVisited(new Date(start.getTime() - 60_000), "datetime", "America/Santiago")).toBe(
+      "Sep 6, 2025, 11:59 PM",
+    );
+  });
+
+  it("takes the first of two midnights when the clock goes back to 00:00 (Havana)", () => {
+    // 01:00 -04 → 00:00 -05, so 00:00–00:59 happens twice; the day starts at the first.
+    expect(iso(startOfLocalDay("2025-11-02", "America/Havana"))).toBe("2025-11-02T04:00:00.000Z");
+  });
+
+  it("starts the next day for a day a zone skipped entirely (Samoa, 2011-12-30)", () => {
+    expect(iso(startOfLocalDay("2011-12-30", "Pacific/Apia"))).toBe(iso(startOfLocalDay("2011-12-31", "Pacific/Apia")));
+    expect(iso(startOfLocalDay("2011-12-31", "Pacific/Apia"))).toBe("2011-12-30T10:00:00.000Z");
   });
 });
 
