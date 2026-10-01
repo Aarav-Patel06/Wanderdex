@@ -69,6 +69,22 @@
   transition: none;
 }
 
+/* Add Visit is a subitem of Overworld: its row is indented 48px, and a stepped 4px accent line
+   drops from Overworld's bottom edge (8px in from its left, just left of its icon, across the
+   8px gap between the rows), steps one pixel diagonally, and runs right to Add Visit's cursor
+   slot. Row coordinates: down at x 32–36, the step at 36–40, along at 40–48 through y 20–24,
+   the middle of the 44px row. */
+.nav-branch {
+  position: absolute;
+  top: -8px;
+  left: 32px;
+  width: 16px;
+  height: 32px;
+  background: var(--accent);
+  clip-path: polygon(0 0, 4px 0, 4px 24px, 8px 24px, 8px 28px, 16px 28px, 16px 32px, 8px 32px, 8px 28px, 4px 28px, 4px 24px, 0 24px);
+  pointer-events: none;
+}
+
 /* Add Visit's call to action on hover: a flat shine band steps across it and a pixel
    sparkle twinkles at its right end. On click the + spins round in 45° steps. */
 .nav-add {
@@ -95,10 +111,11 @@
     translate: 256px 0;
   }
 }
+/* In the top-right corner, clear of the label, which nearly fills the indented item. */
 .nav-add .sparkle {
   position: absolute;
-  top: 18px;
-  right: 18px;
+  top: 6px;
+  right: 6px;
   visibility: hidden;
 }
 .nav-add:hover .sparkle {
@@ -172,6 +189,71 @@
 }
 .logo:active {
   translate: 0 4px;
+}
+
+/* Speech-bubble tail: a stepped pixel triangle in a 6px grid, drawn in --tail-outline with a
+   --tail-fill inside. Pointing down: outline rows 30, 30, 18, and 6px wide; fill rows 18, 18,
+   and 6px. Its first row covers the bubble's border, where the fill opens into the tail. The
+   bubble places it (the pin popup in map.css; the Add Visit bubbles below). */
+.speech-tail {
+  position: absolute;
+  width: 30px;
+  height: 24px;
+  background: var(--tail-outline, var(--text));
+  clip-path: polygon(
+    0 0,
+    30px 0,
+    30px 12px,
+    24px 12px,
+    24px 18px,
+    18px 18px,
+    18px 24px,
+    12px 24px,
+    12px 18px,
+    6px 18px,
+    6px 12px,
+    0 12px
+  );
+}
+.speech-tail::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--tail-fill, var(--surface));
+  clip-path: polygon(6px 0, 24px 0, 24px 12px, 18px 12px, 18px 18px, 12px 18px, 12px 12px, 6px 12px);
+}
+
+/* Bubbles that point at the Add Visit nav item (useAddVisitBubble sets data-tail). Beside the
+   desktop sidebar the tail points left, centred 30px below the bubble's top; its right column
+   covers the bubble's left border, which is --tail-overlap px inside the box (6px for the RPG
+   box; 0 for an 8bitcn Card, whose side borders sit outside it). Above the mobile tab bar it
+   points down, --tail-x px from the bubble's left edge. */
+.speech-bubble[data-tail="left"] > .speech-tail {
+  top: 15px;
+  right: calc(100% - var(--tail-overlap, 6px));
+  width: 24px;
+  height: 30px;
+  clip-path: polygon(
+    24px 0,
+    24px 30px,
+    12px 30px,
+    12px 24px,
+    6px 24px,
+    6px 18px,
+    0 18px,
+    0 12px,
+    6px 12px,
+    6px 6px,
+    12px 6px,
+    12px 0
+  );
+}
+.speech-bubble[data-tail="left"] > .speech-tail::before {
+  clip-path: polygon(24px 6px, 24px 24px, 12px 24px, 12px 18px, 6px 18px, 6px 12px, 12px 12px, 12px 6px);
+}
+.speech-bubble[data-tail="down"] > .speech-tail {
+  top: calc(100% - var(--tail-overlap, 6px));
+  left: var(--tail-x, 0px);
 }
 
 /* Mobile tabs: press pushes the tab's content 2px down (like the ghost button), instantly. */

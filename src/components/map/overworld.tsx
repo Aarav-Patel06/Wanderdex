@@ -4,7 +4,7 @@ import { createContext, use, useCallback, useMemo, useState } from "react";
 
 import dynamic from "next/dynamic";
 
-import { useAddVisit } from "@/components/add/add-visit-context";
+import { useAddVisit, useAddVisitBubble } from "@/components/add/add-visit-context";
 import { Loading } from "@/components/loading";
 import { addVisit, type MapPlace, type NewPin } from "@/lib/map/places";
 
@@ -36,7 +36,7 @@ export function useOverworld() {
   return api;
 }
 
-// A ref for a panel floating over the map, marked data-map-cover="bottom" or "right". The map
+// A ref for a panel floating over the map, marked data-map-cover="right". The map
 // pads its camera by how far the panel reaches in (SPEC §13.1), so no pin hides behind it,
 // and follows the panel as it resizes and when it goes away.
 export function useMapCover() {
@@ -90,33 +90,42 @@ export function Overworld({
   );
 }
 
-// No places yet (SPEC §11.7): an RPG dialog-style hint, not a modal, with a choice that opens
-// the add panel. Mobile: near the bottom, clear of the zoom buttons. Desktop: in the part of
-// the map the sidebar and the confirmation panel don't cover. The rpg-box styles are in
-// shell.css (the sidebar's box).
+// No places yet (SPEC §11.7): an RPG dialog-style hint, not a modal, as a speech bubble whose
+// tail points at Add Visit: beside the sidebar on desktop, above the tab bar (pointing down at
+// the Add Visit tab) on mobile (useAddVisitBubble; 6 = the RPG box's border is inside it).
+// "Later" hides it until the Overworld next loads, and so does pressing Add Visit. The rpg-box
+// and tail styles are in shell.css.
 function EmptyHint() {
-  const addVisit = useAddVisit();
+  const { open } = useAddVisit();
+  const [hidden, setHidden] = useState(open);
+  if (open && !hidden) setHidden(true);
+  const ref = useAddVisitBubble(6, true);
+  if (hidden) return null;
+
   return (
-    <div className="pointer-events-none absolute inset-x-4 bottom-20 flex justify-center md:top-1/3 md:right-[calc(1rem+var(--map-right))] md:bottom-auto md:left-80">
-      <div className="pointer-events-auto w-full max-w-sm drop-shadow-pixel">
-        <div className="rpg-box relative flex flex-col gap-4 border-6 border-accent bg-text p-4 text-background">
-          <span aria-hidden="true" className="rpg-box-corner top-0 left-0" />
-          <span aria-hidden="true" className="rpg-box-corner top-0 right-0" />
-          <span aria-hidden="true" className="rpg-box-corner bottom-0 left-0" />
-          <span aria-hidden="true" className="rpg-box-corner right-0 bottom-0" />
-          <p className="font-display text-h3">Your adventure starts here. Add your first place!</p>
-          <button
-            type="button"
-            onClick={addVisit}
-            className="flex min-h-11 items-center gap-3 self-start font-display text-button"
-          >
-            <span aria-hidden="true" className="text-accent">
-              ▶︎
-            </span>
-            Add Visit
-          </button>
-        </div>
+    <div
+      ref={ref}
+      style={{ visibility: "hidden" }}
+      className="speech-bubble fixed inset-x-4 ml-auto max-w-sm drop-shadow-pixel md:right-auto md:ml-0 md:w-96 md:max-w-none"
+    >
+      <div className="rpg-box relative flex flex-col gap-4 border-6 border-accent bg-text p-4 text-background">
+        <span aria-hidden="true" className="rpg-box-corner top-0 left-0" />
+        <span aria-hidden="true" className="rpg-box-corner top-0 right-0" />
+        <span aria-hidden="true" className="rpg-box-corner bottom-0 left-0" />
+        <span aria-hidden="true" className="rpg-box-corner right-0 bottom-0" />
+        <p className="font-display text-h3">Your adventure starts here. Add your first place!</p>
+        <button
+          type="button"
+          onClick={() => setHidden(true)}
+          className="flex min-h-11 items-center gap-3 self-start font-display text-button"
+        >
+          <span aria-hidden="true" className="text-accent">
+            ▶︎
+          </span>
+          Later
+        </button>
       </div>
+      <span aria-hidden="true" className="speech-tail [--tail-fill:var(--text)] [--tail-outline:var(--accent)]" />
     </div>
   );
 }

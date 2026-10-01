@@ -80,9 +80,9 @@ export function ConfirmCard({
   }
 
   return (
-    <form onSubmit={save} className="flex flex-col gap-6">
-      <fieldset disabled={saving} className="flex flex-col gap-3">
-        <legend className="mb-2 text-small">
+    <form onSubmit={save} className="flex flex-col gap-4">
+      <fieldset disabled={saving} className="flex flex-col gap-2">
+        <legend className="mb-1 text-small">
           {lookup.candidates.length === 1 ? "Match" : `Matches (${lookup.candidates.length})`}
         </legend>
         {lookup.candidates.map((option, index) => (
@@ -90,7 +90,7 @@ export function ConfirmCard({
           // one is accent with dark text.
           <label
             key={option.google_place_id}
-            className="flex min-h-11 cursor-pointer items-center gap-3 border-4 border-text bg-background px-2 py-1 has-checked:bg-accent has-focus-visible:outline-4 has-focus-visible:outline-offset-2 has-focus-visible:outline-accent"
+            className="flex min-h-11 cursor-pointer items-center gap-3 border-4 border-text bg-background px-2 py-0.5 has-checked:bg-accent has-focus-visible:outline-4 has-focus-visible:outline-offset-2 has-focus-visible:outline-accent"
           >
             <input
               type="radio"
@@ -108,14 +108,14 @@ export function ConfirmCard({
               className="pixelated shrink-0"
             />
             <span className="flex min-w-0 flex-col">
-              <span className="break-words">{option.name}</span>
-              <span className="text-small">{[option.city, option.country].filter(Boolean).join(", ")}</span>
+              <span className="text-small break-words">{option.name}</span>
+              <span className="text-tiny">{[option.city, option.country].filter(Boolean).join(", ")}</span>
             </span>
           </label>
         ))}
       </fieldset>
 
-      <div role="group" aria-labelledby={`${ids}-when`} className="flex flex-col gap-2">
+      <div role="group" aria-labelledby={`${ids}-when`} className="flex flex-col gap-1.5">
         <span id={`${ids}-when`} className="text-small">
           Date & time
         </span>
@@ -162,7 +162,7 @@ export function ConfirmCard({
         <p className="text-tiny">Local time at the place.</p>
       </div>
 
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-1.5">
         <Label htmlFor={`${ids}-category`}>Category</Label>
         <div className="px-1.5">
           <Select value={category} onValueChange={(value) => setCategory(value as Category)} disabled={saving}>
@@ -181,7 +181,9 @@ export function ConfirmCard({
         </div>
       </div>
 
-      <div className="flex flex-col gap-4 px-1.5">
+      {/* gap-7: each button's pixel border reaches 6px outside it and Save's shadow 4px below,
+          so this leaves a clear 12px between Save visit and Cancel. */}
+      <div className="flex flex-col gap-7 px-1.5">
         {/* An exact time that was cleared can't be saved. */}
         <Button type="submit" disabled={saving || (when.precision === "datetime" && !when.time)}>
           Save visit

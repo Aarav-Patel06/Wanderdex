@@ -383,7 +383,7 @@ Shown after any successful lookup:
 | Unsupported file | "That file isn't a photo we can read." |
 | Rate limit hit | "Slow down, traveler! Try again in a bit." |
 | Google or network error | "The map spirits aren't answering. Try again." |
-| No visits yet (Overworld) | RPG dialog-style hint: "Your adventure starts here. Add your first place!" |
+| No visits yet (Overworld) | RPG dialog-style hint: "Your adventure starts here. Add your first place!", as a speech bubble whose tail points at Add Visit (the sidebar item on desktop, the tab on mobile), with a "Later" button. Later hides it until the Overworld next loads; pressing Add Visit does too. |
 | No visits match filters | "No visits match these filters." |
 
 Messages that need acknowledgment use the RPG dialog. Non-blocking messages use toasts or alerts.
@@ -483,15 +483,15 @@ Display labels: "Food", "Cafe", "Bar", "Museum", "Landmark", "Park & Nature", "S
 - **Single place:** the category sprite at **32px** (CSS) with `image-rendering: pixelated`, anchored at the pin's bottom tip, and **64px** from zoom 14 up, so pins read well up close. The selected pin is one step up: **64px**, or **96px** from zoom 14. Whole multiples only (§16.5 rule 4). Every pin's tap target is at least 44px.
 - **Cluster:** `pin_group.png` at 32px (at every zoom) with a small dark badge on its top-right corner showing the count in the pixel font (cream text on `#2D201C`), capped at "99+". The sprite's white circle is too small for a number. Tapping a cluster zooms in to expand it.
 - **One pin per place**, even with several visits.
-- Tapping a pin opens a popup: a speech-bubble pixel card on `surface` with a stepped pixel tail pointing at the pin (pointing up instead when the card has to sit below the pin). Its content is left-aligned on one edge: the name; the category line (label first, then its sprite); a full-width 1px divider in `text`; city/country and the number of visits; then a "View" button → `/places/[id]` stretched to the card's width.
+- Tapping a pin opens a popup: a speech-bubble pixel card on `surface` with a stepped pixel tail pointing at the pin (pointing up instead when the card has to sit below the pin). Its content is left-aligned on one edge: the name; the category line (label first, then its sprite); city/country; a full-width 1px divider in `text`; the number of visits; then a "View" button → `/places/[id]` stretched to the card's width.
 
 ### 13.5 Plan B
 ~~If the pixelated map proves unworkable on real devices, fall back to the same styled map **without** pixelation, inside a retro pixel frame.~~ **Decided 2026-09-30: not used.** After testing on real devices, the hybrid map (§13.1, pixelated at world zoom, smooth when zoomed in) was chosen over Plan B. See `DECISIONS.md`.
 
 ### 13.6 Map legend
 - A pixel icon button (Pixelarticons, 44px) below the zoom buttons toggles a legend card. Closed by default.
-- The card is a pixel card on `surface` titled "MAP LEGEND". It lists all 10 category sprites with their §12.5 labels, in that order, plus the cluster pin labelled "Group".
-- It opens beside the map controls, top-aligned with them, and must fit a 375px screen: it never covers the zoom buttons, the attribution, or the tab bar, and scrolls inside when it's taller than the space.
+- The card is a pixel card on `surface` titled "MAP LEGEND". It lists all 10 category sprites with their §12.5 labels, in that order, plus the cluster pin labelled "Group". Compact: tight rows, labels in Small (desktop) or Tiny (phones), sprites at 32px (§16.7).
+- Desktop: it opens beside the map controls, top-aligned with them, in one column. Phones: it opens below the map controls, across the map's width, in a two-column grid. It never covers the zoom buttons, the legend button, the attribution, or the tab bar (the buttons stay tappable while it's open), and it scrolls inside only when it's taller than the space.
 
 ---
 
@@ -506,13 +506,15 @@ Display labels: "Food", "Cafe", "Bar", "Museum", "Landmark", "Park & Nature", "S
 | `/places/[id]` | Place detail: place info + all of the user's visits there |
 
 ### 14.1 Navigation
-- **Desktop:** a left sidebar styled like the RPG dialog (§16.6): a floating box inset from the viewport edges by a margin, full height minus that margin, with a dark `text` fill, an `accent` pixel border with notched corners and small pixel corner ornaments, cream text, and a solid offset shadow. On the Overworld the map runs full-bleed behind it (§13.1); on other pages it floats over the page background, and the content starts to its right. Items, top to bottom: the passport logo + "WANDERDEX" (links to `/`; hover bounces the logo with a tiny pixel sparkle, press pushes it in), then **Overworld**, **My Visits**, **Add Visit** (opens the add panel on the Overworld), then a divider and, at the bottom, the user's initial in a pixel frame + username, and **Log out** (RPG confirm dialog). No Profile or Settings items, and no Settings page.
+- **Desktop:** a left sidebar styled like the RPG dialog (§16.6): a floating box inset from the viewport edges by a margin, full height minus that margin, with a dark `text` fill, an `accent` pixel border with notched corners and small pixel corner ornaments, cream text, and a solid offset shadow. On the Overworld the map runs full-bleed behind it (§13.1); on other pages it floats over the page background, and the content starts to its right. Items, top to bottom: the passport logo + "WANDERDEX" (links to `/`; hover bounces the logo with a tiny pixel sparkle, press pushes it in), then **Overworld**, **Add Visit** as its subitem (indented beneath it, joined to it by a stepped pixel connector line in `accent`, always visible, no collapse), then **My Visits**, then a divider and, at the bottom, the user's initial in a pixel frame + username, and **Log out** (RPG confirm dialog). No Profile or Settings items, and no Settings page.
   - **RPG cursor:** a "▶" marker beside the item under the mouse, else the keyboard-focused one, else the current page's. The current page's item keeps the `primary` fill.
   - **Hover and press:** hover lifts an item up-left onto a larger offset shadow; press pushes it flat (it moves by the full shadow offset and the shadow goes to 0), like the buttons. The shadow is `accent`, which shows on the dark box. Add Visit adds a call to action on hover (a pixel sparkle and a flat shine band), and on click its + icon spins round in steps.
+  - **Add Visit** toggles the add bubble on the Overworld (§14.2). From another page it navigates to `/` and opens the bubble.
 - **Mobile:** bottom tab bar with **Overworld**, **My Visits**, **Add Visit** (opens the drawer), with Pixelarticons icons and 8px Press Start 2P labels. Same visual language as the sidebar: dark fill down to the bottom screen edge (safe area), an `accent` pixel border along its top edge, the active tab in `accent` with the "▶" marker beside its icon, and a press animation on tap. Tabs stay at least 44px tall. Log out lives in a small menu button (user initial) in the top-right corner of the Overworld.
 
 ### 14.2 Overworld (`/`)
-- **Desktop:** the map fills the window, full-bleed behind the floating sidebar. The add panel ("Add Anything") docks along the bottom of the map area with the three mode buttons, as in the sheet. The confirmation card opens as a side panel over the map.
+- **Desktop:** the map fills the window, full-bleed behind the floating sidebar. There is no always-visible add panel. Pressing Add Visit in the sidebar opens the add panel ("Add Anything") as a speech bubble next to the sidebar, its stepped pixel tail pointing at the Add Visit item: a cream pixel card on `surface` like the pin popup (§13.4). It holds the three mode buttons as a vertical menu (Upload Photo disabled until Phase 2), with the "▶" cursor on the hovered or focused one. Choosing a mode turns the same bubble into that mode's input (e.g. the link field + Find), with a Back button to the menu. After a successful lookup the bubble closes and the confirmation card opens as a side panel over the map, on the right. The bubble closes on Escape, a click outside it, or pressing Add Visit again; closing it clears its input.
+- **Fit:** at 1280×800 (desktop) and 390×844 (iPhone), the add bubble, the add drawer, the confirmation card (with up to 3 candidates), and the map legend fit without scrolling inside. Smaller screens may scroll.
 - **Mobile:** full-screen map. A slide-up drawer holds the add panel (three mode buttons) and becomes the confirmation card after a lookup.
 
 ### 14.3 My Visits (`/visits`)
@@ -661,6 +663,7 @@ Toasts auto-dismiss after ~4 s and have a close (×) button. Copy is in §11.6 a
 9. The rating selector wraps to 2×5 on mobile.
 10. The app name is Wanderdex, not "Travel Passport".
 11. The desktop sidebar follows the RPG dialog style (dark box, accent pixel border, cream text, "▶" cursor) and floats over the map, instead of the sheet's flush dark panel (§14.1).
+12. Desktop: Add Visit is a subitem of Overworld, above My Visits, and opens the add panel as a speech bubble beside the sidebar, instead of the sheet's "Add Anything" panel docked along the bottom of the map (§14.1, §14.2).
 
 ---
 

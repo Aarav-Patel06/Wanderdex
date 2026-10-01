@@ -42,15 +42,16 @@ export interface BitAlertProps
 function Alert({ children, className, font, variant, ...props }: BitAlertProps) {
   const Icon = variant === "warning" || variant === "error" ? variantIcons[variant] : null;
 
+  // The caller's classes (e.g. a margin) go on the wrapper, which the pixel border below is
+  // positioned against, so the border always hugs the filled box.
   return (
-    <div className="relative">
+    <div className={cn("relative", className)}>
       <ShadcnAlert
         {...props}
         className={cn(
           "relative rounded-none border-none bg-background text-body",
           alertVariants({ variant }),
-          font === "retro" && "retro",
-          className
+          font === "retro" && "retro"
         )}
       >
         {Icon && <Icon aria-hidden="true" className="size-6" />}

@@ -92,9 +92,9 @@ function popupOffset(pinHeight: number): Offset {
 const popupPadding = ({ left, right }: PaddingOptions) => ({ bottom: Infinity, left, right });
 
 // How far the panels floating over the map reach into it (SPEC §13.1): the desktop sidebar on
-// the left (SPEC §14.1), and the add panel's dock at the bottom and the confirmation panel on
-// the right (data-map-cover, see useMapCover). A hidden panel (display: none, e.g. the sidebar
-// on mobile) has an all-zero rect and counts as 0.
+// the left (SPEC §14.1), and the confirmation panel on the right (data-map-cover, see
+// useMapCover). A hidden panel (display: none, e.g. the sidebar on mobile) has an all-zero rect
+// and counts as 0.
 type Padding = { top: number; right: number; bottom: number; left: number };
 
 function cameraPadding(container: HTMLElement): Padding {
@@ -111,7 +111,7 @@ function cameraPadding(container: HTMLElement): Padding {
     top: 0,
     left: reach("[data-sidebar]", (rect) => rect.right - box.left),
     right: reach('[data-map-cover="right"]', (rect) => box.right - rect.left),
-    bottom: reach('[data-map-cover="bottom"]', (rect) => box.bottom - rect.top),
+    bottom: 0,
   };
 }
 
@@ -211,8 +211,7 @@ export function MapView({
         // Stop zooming out once the world is as wide as the map: further out, the pixels swallow
         // countries. MapLibre fires resize for container size changes, orientation changes
         // included. setMinZoom zooms back in if the map is now below the new minimum. The
-        // sidebar and dock come and go at the desktop breakpoint, so the camera's padding
-        // follows them. Padding changes wait for a movement to end.
+        // sidebar comes and goes at the desktop breakpoint, so the camera's padding follows it. Padding changes wait for a movement to end.
         map.on("resize", () => {
           const minZoom = minZoomFor(map.getContainer().clientWidth);
           if (map.getMinZoom() !== minZoom) map.setMinZoom(minZoom);
@@ -387,18 +386,21 @@ export function MapView({
         </div>
       )}
 
-      {/* Mobile: below the avatar menu button (top-right, 44px + shadow). Desktop: top-right, left
-          of the confirmation panel while it's open (--map-right, map.css). */}
+      {/* Mobile: below the avatar menu button (top-right, 44px + shadow), with the same inset from
+          the edge. Desktop: top-right, left of the confirmation panel while it's open
+          (--map-right, map.css). The icon buttons' pixel border sits 4px outside them, hence
+          mr-1: the border's outer edge lines up with the avatar's. z-10 keeps them above the
+          legend and the popups. */}
       <div
         className={cn(
           CONTROLS_TOP,
-          "absolute right-[calc(1.25rem+var(--map-right)+env(safe-area-inset-right))] flex flex-col gap-4",
+          "absolute right-[calc(1rem+var(--map-right,0px)+env(safe-area-inset-right))] z-10 flex flex-col gap-4",
         )}
       >
-        <Button variant="secondary" size="icon" aria-label="Zoom in" onClick={() => map?.zoomIn()} className="mx-0">
+        <Button variant="secondary" size="icon" aria-label="Zoom in" onClick={() => map?.zoomIn()} className="mr-1 ml-0">
           <Plus aria-hidden="true" className="size-6" />
         </Button>
-        <Button variant="secondary" size="icon" aria-label="Zoom out" onClick={() => map?.zoomOut()} className="mx-0">
+        <Button variant="secondary" size="icon" aria-label="Zoom out" onClick={() => map?.zoomOut()} className="mr-1 ml-0">
           <Minus aria-hidden="true" className="size-6" />
         </Button>
         <Button
@@ -408,7 +410,7 @@ export function MapView({
           aria-expanded={legendOpen}
           aria-controls={legendId}
           onClick={() => setLegendOpen((open) => !open)}
-          className="mx-0"
+          className="mr-1 ml-0"
         >
           <InfoBox aria-hidden="true" className="size-6" />
         </Button>
@@ -490,15 +492,15 @@ function PinCard({ place }: { place: MapPlace }) {
               className="pixelated"
             />
           </p>
-          <hr className="border-0 border-t border-text" />
           {where && <p>{where}</p>}
+          <hr className="border-0 border-t border-text" />
           <p>{place.visits === 1 ? "1 visit" : `${place.visits} visits`}</p>
           <Button asChild className="mx-1.5 mt-2">
             <Link href={`/places/${place.id}`}>View</Link>
           </Button>
         </CardContent>
       </Card>
-      <span aria-hidden="true" className="pin-tail" />
+      <span aria-hidden="true" className="speech-tail pin-tail" />
     </div>
   );
 }
@@ -506,29 +508,31 @@ function PinCard({ place }: { place: MapPlace }) {
 // Mobile: below the avatar menu button. Desktop: top-right.
 const CONTROLS_TOP = "top-[calc(4.75rem+env(safe-area-inset-top))] md:top-[calc(1rem+env(safe-area-inset-top))]";
 
-// Opens beside the map controls, top-aligned with them, and never taller than the map minus
-// room for the attribution, so it covers neither; it scrolls inside when it doesn't fit (SPEC
-// §13.6). 70px = the 44px buttons + their 4px outside border + a 16px gap + the card's 6px
-// outside border.
+// Never covers the map controls, and is never taller than the map minus room for the
+// attribution; it scrolls inside when it doesn't fit (SPEC §13.6). Mobile: below the controls
+// (their three 44px buttons with 16px gaps = 164px, their 4px shadow, a 16px gap), across the
+// map's width, in two columns. Desktop: beside the controls, top-aligned with them, in one
+// column; 70px = the 44px buttons + their 4px outside border + a 16px gap + the card's 6px
+// outside border. Both leave room for the card's 6px outside side borders.
 function MapLegend({ id }: { id: string }) {
   return (
     <div
       className={cn(
-        CONTROLS_TOP,
-        "absolute right-[calc(1.25rem+70px+var(--map-right)+env(safe-area-inset-right))] flex max-h-[calc(100%-4.75rem-env(safe-area-inset-top)-4rem)] flex-col md:max-h-[calc(100%-1rem-env(safe-area-inset-top)-4rem)]",
+        "absolute top-[calc(4.75rem+184px+env(safe-area-inset-top))] right-[calc(1rem+6px+env(safe-area-inset-right))] left-[calc(1rem+6px+env(safe-area-inset-left))] flex max-h-[calc(100%-4.75rem-184px-env(safe-area-inset-top)-4rem)] flex-col",
+        "md:top-[calc(1rem+env(safe-area-inset-top))] md:right-[calc(1.25rem+70px+var(--map-right,0px)+env(safe-area-inset-right))] md:left-auto md:max-h-[calc(100%-1rem-env(safe-area-inset-top)-4rem)]",
       )}
     >
       <Card
         id={id}
         role="region"
         aria-labelledby={`${id}-title`}
-        className="flex min-h-0 w-56 flex-col font-body"
+        className="flex min-h-0 w-full flex-col font-body [--card-spacing:--spacing(3)] md:w-56"
       >
         <CardHeader>
           <CardTitle id={`${id}-title`}>MAP LEGEND</CardTitle>
         </CardHeader>
         <CardContent className="min-h-0 overflow-y-auto">
-          <ul className="flex flex-col gap-2">
+          <ul className="grid grid-cols-2 gap-x-4 gap-y-1 text-tiny md:grid-cols-1 md:text-small">
             {CATEGORIES.map((category) => (
               <LegendRow key={category} sprite={categorySprite(category)} label={CATEGORY_LABELS[category]} />
             ))}
@@ -542,8 +546,8 @@ function MapLegend({ id }: { id: string }) {
 
 function LegendRow({ sprite, label }: { sprite: string; label: string }) {
   return (
-    <li className="flex items-center gap-3">
-      <Image src={sprite} alt="" width={32} height={32} unoptimized className="pixelated" />
+    <li className="flex items-center gap-2">
+      <Image src={sprite} alt="" width={32} height={32} unoptimized className="pixelated shrink-0" />
       {label}
     </li>
   );

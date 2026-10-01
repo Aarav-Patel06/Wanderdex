@@ -23,10 +23,9 @@ import { cn } from "@/lib/utils";
 
 import "./shell.css";
 
-const NAV_LINKS = [
-  { href: "/", label: "Overworld", Icon: MapIcon },
-  { href: "/visits", label: "My Visits", Icon: Notes },
-] as const;
+const OVERWORLD = { href: "/", label: "Overworld", Icon: MapIcon } as const;
+const MY_VISITS = { href: "/visits", label: "My Visits", Icon: Notes } as const;
+const NAV_LINKS = [OVERWORLD, MY_VISITS] as const;
 
 // Lift, press, and the current page's shadow live in shell.css (.nav-item).
 const sidebarItem =
@@ -40,6 +39,7 @@ export function AppShell({ username, children }: { username: string; children: R
   const [leaving, startLeaving] = useTransition();
   const [spinning, setSpinning] = useState(false);
   const addVisit = useAddVisitController();
+  const addPanelOpen = addVisit.open && pathname === "/";
   const initial = username.charAt(0).toUpperCase();
 
   return (
@@ -48,7 +48,7 @@ export function AppShell({ username, children }: { username: string; children: R
           keeps its pins clear of it (the map reads data-sidebar); other pages pad past it. */}
       <aside
         data-sidebar
-        className="sidebar fixed inset-y-4 left-4 z-10 hidden w-72 drop-shadow-pixel md:block"
+        className="sidebar fixed inset-y-4 left-4 z-10 hidden w-80 drop-shadow-pixel md:block"
       >
         <div className="rpg-box relative flex h-full flex-col gap-8 overflow-y-auto border-6 border-accent bg-text p-4 text-background">
           <span aria-hidden="true" className="rpg-box-corner top-0 left-0" />
@@ -71,32 +71,23 @@ export function AppShell({ username, children }: { username: string; children: R
             <span className="font-display text-h3">WANDERDEX</span>
           </Link>
 
+          {/* Add Visit is a subitem of Overworld, indented under it and joined to it by a stepped
+              pixel line (.nav-branch, shell.css). */}
           <nav aria-label="Main">
             <ul className="flex flex-col gap-2">
-              {NAV_LINKS.map(({ href, label, Icon }) => (
-                <li key={href} className="nav-row flex items-center gap-2">
-                  <NavCursor />
-                  <Link
-                    href={href}
-                    aria-current={pathname === href ? "page" : undefined}
-                    className={cn(
-                      sidebarItem,
-                      pathname === href ? "bg-primary text-on-primary" : "hover:bg-background/10",
-                    )}
-                  >
-                    <Icon aria-hidden="true" className="size-6 shrink-0" />
-                    {label}
-                  </Link>
-                </li>
-              ))}
-              <li className="nav-row flex items-center gap-2">
+              <SidebarLink {...OVERWORLD} current={pathname === OVERWORLD.href} />
+              <li className="nav-row relative flex items-center gap-2 pl-12">
+                <span aria-hidden="true" className="nav-branch" />
                 <NavCursor />
                 <button
                   type="button"
+                  data-add-visit
+                  aria-haspopup="dialog"
+                  aria-expanded={addPanelOpen}
                   data-spin={spinning || undefined}
                   onClick={() => {
                     setSpinning(true);
-                    addVisit.request();
+                    addVisit.toggle();
                   }}
                   onAnimationEnd={(event) => {
                     if (event.animationName === "nav-spin") setSpinning(false);
@@ -108,6 +99,7 @@ export function AppShell({ username, children }: { username: string; children: R
                   <span aria-hidden="true" className="sparkle" />
                 </button>
               </li>
+              <SidebarLink {...MY_VISITS} current={pathname === MY_VISITS.href} />
             </ul>
           </nav>
 
@@ -133,14 +125,14 @@ export function AppShell({ username, children }: { username: string; children: R
       </aside>
 
       {/* Mobile: bottom padding = the fixed tab bar (4rem tabs + safe-area inset), so nothing hides behind it.
-          Desktop: pages other than the Overworld start past the sidebar (1rem margin + 18rem + 1rem). */}
+          Desktop: pages other than the Overworld start past the sidebar (1rem margin + 20rem + 1rem). */}
       <main
         className={cn(
           "relative min-h-0 flex-1 overflow-y-auto pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0",
-          pathname !== "/" && "md:pl-80",
+          pathname !== "/" && "md:pl-88",
         )}
       >
-        {/* Pages open the add panel through this (the Overworld's hint, the add panel itself). */}
+        {/* The Overworld's add panel and empty-state hint read the panel's state through this. */}
         <AddVisitProvider value={addVisit}>{children}</AddVisitProvider>
 
         {pathname === "/" && (
@@ -148,7 +140,7 @@ export function AppShell({ username, children }: { username: string; children: R
           <DropdownMenu modal={false}>
             <DropdownMenuTrigger
               aria-label={`${username} menu`}
-              className="absolute top-[calc(1rem+env(safe-area-inset-top))] right-4 shadow-pixel md:hidden"
+              className="absolute top-[calc(1rem+env(safe-area-inset-top))] right-[calc(1rem+env(safe-area-inset-right))] shadow-pixel md:hidden"
             >
               <UserInitial initial={initial} />
             </DropdownMenuTrigger>
@@ -185,7 +177,14 @@ export function AppShell({ username, children }: { username: string; children: R
             <span>{label}</span>
           </Link>
         ))}
-        <button type="button" onClick={addVisit.request} className={tabItem}>
+        <button
+          type="button"
+          data-add-visit
+          aria-haspopup="dialog"
+          aria-expanded={addPanelOpen}
+          onClick={addVisit.toggle}
+          className={tabItem}
+        >
           <Plus aria-hidden="true" className="size-6" />
           <span>Add Visit</span>
         </button>
@@ -213,6 +212,27 @@ export function AppShell({ username, children }: { username: string; children: R
 // primary is only OK at 16px+ (SPEC §16.3). 60px tabs + the bar's 4px accent top border =
 // the 4rem bottom padding on <main>. Press (shell.css) nudges the tab's content down.
 const tabItem = "tab-item flex min-h-15 flex-col items-center justify-center gap-1 font-display text-tab";
+
+function SidebarLink({
+  href,
+  label,
+  Icon,
+  current,
+}: (typeof NAV_LINKS)[number] & { current: boolean }) {
+  return (
+    <li className="nav-row flex items-center gap-2">
+      <NavCursor />
+      <Link
+        href={href}
+        aria-current={current ? "page" : undefined}
+        className={cn(sidebarItem, current ? "bg-primary text-on-primary" : "hover:bg-background/10")}
+      >
+        <Icon aria-hidden="true" className="size-6 shrink-0" />
+        {label}
+      </Link>
+    </li>
+  );
+}
 
 // The RPG cursor's slot beside a sidebar item; shell.css shows it on one item at a time.
 function NavCursor() {

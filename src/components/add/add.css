@@ -4,3 +4,21 @@
 .add-drawer[data-vaul-drawer][data-vaul-drawer-direction="bottom"]::after {
   content: none;
 }
+
+/* The desktop bubble's mode menu (add-panel.tsx): the RPG cursor (▶) beside the hovered mode,
+   else the focused one, nudging like the sidebar's (nav-cursor keyframes in shell.css). Dark
+   on the cream card, like a classic menu box; accent on surface is too faint (SPEC §16.3). */
+.mode-cursor {
+  visibility: hidden;
+  color: var(--text);
+}
+.mode-row:has(> button:hover) > .mode-cursor,
+.mode-list:not(:has(button:hover)) .mode-row:has(> button:focus) > .mode-cursor {
+  visibility: visible;
+  animation: nav-cursor 0.8s steps(1) infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .mode-cursor {
+    animation: none !important;
+  }
+}

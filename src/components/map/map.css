@@ -78,39 +78,13 @@
   display: none;
 }
 
-/* The popup card's speech-bubble tail: a stepped pixel triangle in the card's 6px grid. Its
-   top row covers the card's bottom border, where the surface fill opens into the tail. Dark
-   outline: 30px, 30px, 18px, 6px wide rows; surface fill: 18px, 18px, 6px. It points down
-   at the pin from the card's centre, or from 30px in from a corner at a corner anchor
-   (TAIL_INSET in map-view.tsx). With the card below the pin, it flips to point up. */
+/* The popup card's speech-bubble tail (.speech-tail in shell.css: dark outline, surface fill).
+   Its top row covers the card's bottom border. It points down at the pin from the card's
+   centre, or from 30px in from a corner at a corner anchor (TAIL_INSET in map-view.tsx).
+   With the card below the pin, it flips to point up. */
 .pin-tail {
-  position: absolute;
   top: calc(100% - 6px);
   left: calc(50% - 15px);
-  width: 30px;
-  height: 24px;
-  background: var(--text);
-  clip-path: polygon(
-    0 0,
-    30px 0,
-    30px 12px,
-    24px 12px,
-    24px 18px,
-    18px 18px,
-    18px 24px,
-    12px 24px,
-    12px 18px,
-    6px 18px,
-    6px 12px,
-    0 12px
-  );
-}
-.pin-tail::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: var(--surface);
-  clip-path: polygon(6px 0, 24px 0, 24px 12px, 18px 12px, 18px 18px, 12px 18px, 12px 12px, 6px 12px);
 }
 .maplibregl-popup-anchor-bottom-left .pin-tail,
 .maplibregl-popup-anchor-top-left .pin-tail {
@@ -130,8 +104,8 @@
 }
 
 /* The desktop confirmation panel (SPEC §14.2) covers the map's right edge while it's open, so
-   the zoom buttons, the legend, the add panel's dock, and the empty-state hint move left of
-   it: the panel's 24rem plus its 1rem margin, its 6px outside border, and a gap. */
+   the zoom buttons and the legend move left of it: the panel's 24rem plus its 1rem margin, its
+   6px outside border, and a gap. */
 .overworld {
   --map-right: 0px;
 }
