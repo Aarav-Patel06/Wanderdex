@@ -3,7 +3,7 @@
 import { z } from "zod";
 
 import type { Category } from "@/lib/categories";
-import { formatVisited, type Precision } from "@/lib/dates";
+import { formatVisitedParts, type Precision } from "@/lib/dates";
 import { createClient } from "@/lib/supabase/server";
 import { type VisitFilters, visitFiltersSchema } from "@/lib/visit-filters";
 import { filterVisits, visitTimeZones } from "@/lib/visit-query";
@@ -16,7 +16,9 @@ export type VisitListItem = {
   name: string;
   where: string;
   category: Category;
+  // The date at its precision; an exact time apart, so phones can leave it out.
   date: string;
+  time: string | null;
   rating: number | null;
 };
 
@@ -63,7 +65,7 @@ export async function loadVisits(
     name: places.name,
     where: [places.city, places.country].filter(Boolean).join(", "),
     category,
-    date: formatVisited(visited_at, visited_precision, timezone),
+    ...formatVisitedParts(visited_at, visited_precision, timezone),
     rating,
   }));
   return { items, next: data.length > PAGE_SIZE ? start + PAGE_SIZE : null };

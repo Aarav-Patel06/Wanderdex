@@ -106,7 +106,7 @@ export function FilterBar({
 
       <div aria-busy={loading} className={cn(loading && "opacity-50")}>
         {noMatches ? (
-          <div className="flex flex-col items-start gap-4">
+          <div className="visits-panel flex flex-col items-start gap-4">
             <p>No visits match these filters.</p>
             <Button type="button" variant="secondary" onClick={clear} className="mx-1.5">
               Clear filters

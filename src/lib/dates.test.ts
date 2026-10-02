@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   exifToUtc,
   formatVisited,
+  formatVisitedParts,
   isLocalValue,
   isTimeZone,
   localToUtc,
@@ -143,6 +144,26 @@ describe("formatVisited", () => {
   it("formats midnight and noon", () => {
     expect(formatVisited("2025-03-12T00:05:00Z", "datetime", "UTC")).toBe("Mar 12, 2025, 12:05 AM");
     expect(formatVisited("2025-03-12T12:00:00Z", "datetime", "UTC")).toBe("Mar 12, 2025, 12:00 PM");
+  });
+});
+
+describe("formatVisitedParts", () => {
+  it("splits an exact time from its date, in the place's zone", () => {
+    expect(formatVisitedParts("2025-03-12T19:45:00+00:00", "datetime", "America/New_York")).toEqual({
+      date: "Mar 12, 2025",
+      time: "3:45 PM",
+    });
+    // 00:30 UTC on the 13th is still the 12th in New York.
+    expect(formatVisitedParts("2025-03-13T00:30:00Z", "datetime", "America/New_York")).toEqual({
+      date: "Mar 12, 2025",
+      time: "8:30 PM",
+    });
+  });
+
+  it("has no time for date and month precision", () => {
+    const at = visitedAtUtc("2025-03-12", "date", "Pacific/Auckland");
+    expect(formatVisitedParts(at, "date", "Pacific/Auckland")).toEqual({ date: "Mar 12, 2025", time: null });
+    expect(formatVisitedParts(at, "month", "Pacific/Auckland")).toEqual({ date: "Mar 2025", time: null });
   });
 });
 

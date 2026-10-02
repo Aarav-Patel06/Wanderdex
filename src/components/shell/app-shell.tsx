@@ -13,6 +13,7 @@ import { Plus } from "pixelarticons/react/Plus";
 import { logout } from "@/app/(app)/actions";
 import { AddVisitProvider, useAddVisitController } from "@/components/add/add-visit-context";
 import { RpgDialog } from "@/components/dialogs/rpg-dialog";
+import { PageBackground } from "@/components/page-background";
 import { useTrackNavigation } from "@/components/shell/back-button";
 import {
   DropdownMenu,
@@ -46,6 +47,14 @@ export function AppShell({ username, children }: { username: string; children: R
 
   return (
     <div className="flex h-dvh flex-col md:flex-row">
+      {/* The plain cream pages' background art; not on the Overworld. Phones: between the status
+          bar and the tab bar. Desktop: right of the sidebar, where the content is. */}
+      {pathname !== "/" && (
+        <PageBackground
+          phone="bottom"
+          className="inset-x-0 top-[env(safe-area-inset-top)] bottom-[calc(4rem+env(safe-area-inset-bottom))] md:top-0 md:bottom-0 md:left-88"
+        />
+      )}
       {/* A floating RPG box (SPEC §14.1, §16.9). The Overworld's map runs full-bleed behind it and
           keeps its pins clear of it (the map reads data-sidebar); other pages pad past it. */}
       <aside

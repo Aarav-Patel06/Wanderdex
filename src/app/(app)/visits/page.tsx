@@ -6,6 +6,8 @@ import { VisitList } from "@/app/(app)/visits/visit-list";
 import { createClient } from "@/lib/supabase/server";
 import { filterOptions, filtersFromSearchParams, filtersSearch, hasFilters } from "@/lib/visit-filters";
 
+import "./visits.css";
+
 export const metadata: Metadata = { title: "My Visits · Wanderdex" };
 
 // My Visits (SPEC §14.3): newest visit first, 30 at a time, filtered by the URL query.
@@ -14,15 +16,21 @@ export default async function VisitsPage({ searchParams }: PageProps<"/visits">)
   const [options, first] = await Promise.all([loadFilterOptions(), loadVisits(filters, 0)]);
 
   return (
-    <section className="flex max-w-2xl flex-col gap-6 px-4 py-8 md:px-8">
-      <h1>My Visits</h1>
+    // Full content width. Mobile: the title sits below the status bar (the viewport runs under it).
+    <section className="flex flex-col gap-6 px-4 pt-[calc(2rem+env(safe-area-inset-top))] pb-8 md:px-8 md:pt-8">
+      <header className="flex flex-col gap-2">
+        <h1>My Visits</h1>
+        <p className="text-small">Every place you&apos;ve explored.</p>
+        {/* A 4px line ending in an accent sparkle (visits.css). */}
+        <div aria-hidden="true" className="visits-divider mt-2" />
+      </header>
       {first.items.length || hasFilters(filters) ? (
         <FilterBar filters={filters} options={options} noMatches={!first.items.length}>
           {/* A new list for new filters, starting from their first page. */}
           <VisitList key={filtersSearch(filters)} filters={filters} initial={first} />
         </FilterBar>
       ) : (
-        <p>No visits yet, traveler. Your adventure starts on the Overworld!</p>
+        <p className="visits-panel">No visits yet, traveler. Your adventure starts on the Overworld!</p>
       )}
     </section>
   );

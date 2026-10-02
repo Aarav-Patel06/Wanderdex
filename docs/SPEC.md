@@ -524,15 +524,19 @@ Display labels: "Food", "Cafe", "Bar", "Museum", "Landmark", "Park & Nature", "S
 
 ### 14.3 My Visits (`/visits`)
 - Sorted by `visited_at` descending (most recent visit first).
-- Filters, laid out as in the sheet: a row of **category** chips, then a row of compact **City**, **Country**, and **Date** controls, and a "Clear filters" action whenever any filter is set. Fits 375px with no horizontal scrolling.
+- **Header:** "My Visits" (H1), the subtitle "Every place you've explored." (Small), and a pixel divider line ending in a small `accent` sparkle ornament. No header icon. The page uses the background art (§16.7).
+- Filters, spanning the full content width, laid out as in the sheet: a row of **category** chips, then a row of compact **City**, **Country**, and **Date** controls, and a "Clear filters" action whenever any filter is set. Fits 375px with no horizontal scrolling.
   - **Category chips:** "All" + the 10 categories (§12.5), multi-select. "All" means no category filter: choosing it clears the others, and turning off the last category turns it back on. Chosen chips are `accent` with dark text, like the add flow's choices; at least 44px tall. Below 640px: All, Food, Cafe + a "More" dropdown with the other 8 (as in the sheet); wider: every chip, wrapping.
   - **City / Country:** dropdowns of the user's own distinct values, plus "All cities" / "All countries". With a country chosen, the city list shows only that country's cities, and a chosen city that isn't one of them is cleared.
   - **Date:** opens a popover with From and To on one calendar (§16.6); either end can be left open ("Any"). Matches by precision, in each visit's own time zone: a month-only visit matches if any day of its month is in the range, a date-only visit if its day is, an exact-time visit by its local date.
   - Filtering runs on the server under the user's session (RLS), keeps the sort and "Load more", and lives in the URL query (`?category=food,cafe&country=…&city=…&from=YYYY-MM-DD&to=YYYY-MM-DD`), so reload and Back keep it.
   - No matches: "No visits match these filters." (§11.7) with a Clear filters button.
-- Each row: category sprite (where the sheet shows photos), place name, city/country, rating (if any), date formatted to its precision.
-- Tapping a row → `/places/[id]`, scrolled to that visit, which is briefly highlighted.
+- **Rows:** full content width, each a thin pixel card on `surface`. Left: the category sprite (32px, where the sheet shows photos), then the place name with city/country beneath (both truncate with "…"). Then a vertical divider and a right block: a calendar icon + the date at its precision, and a star icon + the rating ("8/10", or "--" with none) (Pixelarticons). A right arrow at the far end.
+  - The whole row is one link. Hover: `accent` border, a light `background` fill, and the hover lift (up-left onto a larger offset shadow); press pushes it flat; keyboard focus shows the accent outline.
+  - **Narrow (phones):** no vertical divider; name and city/country on the left, date over rating on the right, then the arrow. Exact-time dates leave out the time (the place page keeps it). Rows stay at least 44px tall, with no horizontal scroll at 375px. The layout follows the list's width, not the window's.
+- Tapping a row → `/places/[id]`, scrolled to that visit, which is briefly highlighted (2 s).
 - Load 30 at a time, with a "Load more" button.
+- No visits yet: "No visits yet, traveler. Your adventure starts on the Overworld!" on a pixel card on `surface`, with no filters. "No visits match these filters." (§11.7) sits on the same kind of card.
 
 ### 14.4 Place detail (`/places/[id]`)
 - **Header:** category sprite (64px), name, address, city/country, the user's category for this place (a dropdown of the 10; changing it updates all of the user's visits for this place, §8, so their pin uses it), and an **"Open in Google Maps"** button (§12.2).
@@ -658,6 +662,17 @@ All are true pixel art at native size with no semi-transparent pixels; outline c
 | `pin_other.png` | 32×32 | Other pin |
 | `pin_group.png` | 32×32 | Cluster pin (count goes in a corner badge) |
 | `preview_8x.png`, `preview2_8x.png` | — | Previews only; not used in the app |
+| `bg/map_fragment_americas.png` | 150×136 | Background art, top-left |
+| `bg/map_fragment_asia_pacific.png` | 120×112 | Background art, right |
+| `bg/compass.png` | 60×60 | Background art, bottom-left |
+| `bg/airplane_trail.png` | 104×46 | Background art, top-right |
+| `bg/passport_stamp.png` | 66×48 | Background art, bottom-right |
+| `bg/sparkle_3.png`, `bg/sparkle_5.png` | 3×3, 5×5 | Background art, scattered near the other pieces |
+| `bg/world_map.png` | 360×142 | Provided; not used (the layout uses the two fragments) |
+
+The `bg/` pieces use their own soft colors (darker shades of the cream background, no outline). Like all sprite colors, these stay inside the sprites (§16.2).
+
+**Background art:** the plain cream pages (`/login`, `/signup`, `/visits`, `/places/[id]`, not the Overworld) have a fixed layer of the `bg/` pieces behind the content. It stays put while the page scrolls, takes no pointer events, is hidden from assistive tech, and never causes horizontal scrolling. Each piece is anchored to a corner of the layer as in `docs/design/background-preview.png` (laid out at 1× in `background-composite.png`), at a whole-number scale picked by the layer's size: 2×, 3× from 840×696, 4× from 1500×928. No piece is stretched or cropped to fill. On desktop app pages the layer covers the area right of the sidebar. Phones (layer narrower than 640px or shorter than 464px) get only the compass, the stamp, and a few sparkles at 2×, in the corners the page's text leaves free: the top ones beside the logo on login/signup, the bottom ones (above the tab bar) on app pages.
 
 Always render with `image-rendering: pixelated` at whole-number multiples (32, 64, 96, 128px). Food, Cafe, Museum, and Shopping pins are all reds and are told apart by icon only; this is accepted. Category sprites also replace photo thumbnails in cards and lists.
 

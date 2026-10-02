@@ -105,6 +105,13 @@ export function formatVisited(visitedAt: Date | string, precision: Precision, ti
   return formatInTimeZone(visitedAt, timeZone, DISPLAY[precision]);
 }
 
+// The same, with an exact time apart from its date, so a narrow list can leave the time out:
+// { date: "Mar 12, 2025", time: "3:45 PM" }, and time null for the other precisions.
+export function formatVisitedParts(visitedAt: Date | string, precision: Precision, timeZone: string) {
+  if (precision !== "datetime") return { date: formatVisited(visitedAt, precision, timeZone), time: null };
+  return { date: formatVisited(visitedAt, "date", timeZone), time: formatInTimeZone(visitedAt, timeZone, "h:mm a") };
+}
+
 // Today's date ("YYYY-MM-DD") in a zone, for resolving relative dates in typed text.
 export function todayIn(timeZone: string, now = new Date()) {
   return formatInTimeZone(now, timeZone, "yyyy-MM-dd");

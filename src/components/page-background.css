@@ -1,0 +1,74 @@
+/* Background art (page-background.tsx). The layer is fixed behind the page (z-index -1: under
+   the content, over the body's cream) and clips anything past its edges, so it never scrolls
+   or widens the page. Each piece sits at its offset from its corner, times the scale --s, at
+   whole-number scales only (SPEC §16.5 rule 4). The layer is a size container, so the scale
+   and layout follow the space it covers (on desktop app pages, the area right of the sidebar).
+
+   Layouts, by the layer's size (sprite pixels × scale):
+   - phone (default): 2×, the compass, the stamp, and a few sparkles, in the corners the page
+     picks (data-phone): the top ones beside the auth pages' centered logo, or the bottom ones,
+     clear of the app pages' headers and mostly behind their opaque cards;
+   - full, as in docs/design/background-preview.png: 2× from 640×464, 3× from 840×696,
+     4× from 1500×928. That's 280×232 sprite pixels, the room the full layout needs before
+     the top corner groups meet across or Asia-Pacific reaches the airplane. */
+.page-background {
+  position: fixed;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+  container-type: size;
+}
+
+.page-background-art {
+  --s: 2;
+  position: absolute;
+  inset: 0;
+}
+.page-background-art img {
+  position: absolute;
+  width: calc(var(--w) * var(--s) * 1px);
+  height: auto;
+}
+.page-background img {
+  display: none;
+}
+.page-background[data-phone="top"] img[data-in~="top"],
+.page-background[data-phone="bottom"] img[data-in~="bottom"] {
+  display: block;
+}
+
+.page-background-art [data-corner="tl"],
+.page-background-art [data-corner="bl"] {
+  left: calc(var(--x) * var(--s) * 1px);
+}
+.page-background-art [data-corner="tr"],
+.page-background-art [data-corner="br"] {
+  right: calc(var(--x) * var(--s) * 1px);
+}
+.page-background-art [data-corner="tl"],
+.page-background-art [data-corner="tr"] {
+  top: calc(var(--y) * var(--s) * 1px);
+}
+.page-background-art [data-corner="bl"],
+.page-background-art [data-corner="br"] {
+  bottom: calc(var(--y) * var(--s) * 1px);
+}
+
+@container (min-width: 640px) and (min-height: 464px) {
+  .page-background img[data-in~="full"] {
+    display: block;
+  }
+  .page-background[data-phone] img:not([data-in~="full"]) {
+    display: none;
+  }
+}
+@container (min-width: 840px) and (min-height: 696px) {
+  .page-background-art {
+    --s: 3;
+  }
+}
+@container (min-width: 1500px) and (min-height: 928px) {
+  .page-background-art {
+    --s: 4;
+  }
+}
