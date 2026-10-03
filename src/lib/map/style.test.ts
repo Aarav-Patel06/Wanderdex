@@ -84,6 +84,7 @@ describe("pixelStyle", () => {
       "water",
       "waterway",
       "building",
+      "building_outline",
       "highway_minor",
       "highway_major_inner",
       "boundary_2",
@@ -102,6 +103,7 @@ describe("pixelStyle", () => {
       "var(--map-ocean)",
       "var(--map-ocean)",
       "var(--map-border)",
+      "var(--text)",
       "var(--surface-dark)",
       "var(--surface)",
       "var(--map-border)",
@@ -138,9 +140,21 @@ describe("pixelStyle", () => {
     expect(style.sources.countries).toEqual({ type: "geojson", data: { type: "FeatureCollection", features: [] } });
   });
 
-  it("draws buildings as flat footprints from zoom 15, with no outline", () => {
+  it("draws buildings as flat footprints from zoom 15, with a thin, lightened text-colored outline below the roads", () => {
     expect(layer("building")).toMatchObject({ type: "fill", minzoom: 15 });
     expect(layer("building")?.paint).toEqual({ "fill-antialias": true, "fill-color": "var(--map-border)" });
+    expect(layer("building_outline")).toEqual({
+      id: "building_outline",
+      type: "line",
+      source: "openmaptiles",
+      "source-layer": "building",
+      minzoom: 15,
+      paint: {
+        "line-color": "var(--text)",
+        "line-opacity": 0.6,
+        "line-width": ["interpolate", ["linear"], ["zoom"], 15, 1, 18, 2],
+      },
+    });
   });
 
   it("adds the visited-country fill above the land and below the water, hidden and matching no country", () => {
@@ -169,6 +183,8 @@ describe("modePaints", () => {
       "water fill-antialias": false,
       "waterway line-width": 0,
       "building fill-antialias": false,
+      // Never drawn: buildings start far above the smooth threshold.
+      "building_outline line-width": 6,
       "highway_minor line-width": 6,
       "highway_major_inner line-width": 6,
       "boundary_2 line-width": expect.closeTo(0.06),

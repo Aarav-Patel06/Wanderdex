@@ -3,7 +3,14 @@ import type { ExpressionSpecification, LayerSpecification, StyleSpecification } 
 // OpenFreeMap's Positron, the plainest of its styles (SPEC §12.4). Recolored by pixelStyle.
 export const BASE_STYLE_URL = "https://tiles.openfreemap.org/styles/positron";
 
-export type MapToken = "--map-land" | "--map-ocean" | "--map-border" | "--surface" | "--surface-dark" | "--visited";
+export type MapToken =
+  | "--map-land"
+  | "--map-ocean"
+  | "--map-border"
+  | "--surface"
+  | "--surface-dark"
+  | "--visited"
+  | "--text";
 
 // The hybrid map (SPEC §13.1): pixelated at world zoom, smooth once zoomed in.
 export type MapMode = "pixel" | "smooth";
@@ -16,8 +23,8 @@ const LAYER_TOKENS: Record<string, MapToken> = {
   background: "--map-land",
   water: "--map-ocean",
   waterway: "--map-ocean",
-  // Flat 2D footprints (SPEC §13.2): Positron draws them above water and below every road, so
-  // streets stay readable on top of them.
+  // Flat 2D footprints with a thin outline (SPEC §13.2): Positron draws them above water and
+  // below every road, so streets stay readable on top of them.
   building: "--map-border",
   boundary_2: "--map-border",
   boundary_disputed: "--map-border",
@@ -54,6 +61,12 @@ const CRISP = 0.02;
 // (1px at every zoom), so they get a gentle curve of their own.
 const MOTORWAY_WIDTH = ["interpolate", ["exponential", 1.4], ["zoom"], 6, 1.5, 20, 30];
 const BORDER_WIDTH = ["interpolate", ["linear"], ["zoom"], 3, 1, 5, 1.2, 12, 3];
+// Buildings from street zoom only, far above the smooth threshold, so they're never pixelated.
+const BUILDINGS_FROM = 15;
+// Building outlines, a little wider as the buildings grow...
+const BUILDING_OUTLINE_WIDTH = ["interpolate", ["linear"], ["zoom"], BUILDINGS_FROM, 1, 18, 2];
+// ...and a little lighter than `text`: about #463E35 over the `map-border` fill.
+const BUILDING_OUTLINE_OPACITY = 0.6;
 const SMOOTH_WIDTHS: Record<string, unknown> = {
   waterway: ["interpolate", ["exponential", 1.3], ["zoom"], 6, 1, 20, 12],
   boundary_2: BORDER_WIDTH,
@@ -64,10 +77,28 @@ const SMOOTH_WIDTHS: Record<string, unknown> = {
   highway_motorway_inner: MOTORWAY_WIDTH,
   highway_motorway_bridge_inner: MOTORWAY_WIDTH,
   tunnel_motorway_inner: MOTORWAY_WIDTH,
+  building_outline: BUILDING_OUTLINE_WIDTH,
 };
 
-// Buildings from street zoom only, far above the smooth threshold, so they're never pixelated.
-const MIN_ZOOMS: Record<string, number> = { building: 15 };
+const MIN_ZOOMS: Record<string, number> = { building: BUILDINGS_FROM };
+
+// A thin outline around each footprint (SPEC §13.2), so touching buildings don't merge into one
+// shape. A copy of the tiles' building layer (`fill`, already recolored) as a line, so it shares
+// its source and zoom range, and draws right above it, still below every road. `text` at 60%:
+// the one map color that isn't an exact token (owner-approved), since no token sits between
+// `text` and the `map-border` fill, and `text` at full strength was too heavy.
+function buildingOutline(fill: LayerSpecification & { type: "fill" }, color: (token: MapToken) => string) {
+  return {
+    ...fill,
+    id: "building_outline",
+    type: "line",
+    paint: {
+      "line-color": color("--text"),
+      "line-opacity": BUILDING_OUTLINE_OPACITY,
+      ...smoothPaint({ id: "building_outline", type: "line" }),
+    },
+  } satisfies LayerSpecification;
+}
 
 // The visited-country fill (SPEC §13.3): Natural Earth shapes (public/geo/countries.geojson),
 // loaded into the empty source once the map has drawn, filtered to the user's countries.
@@ -141,14 +172,16 @@ export function modePaints(style: StyleSpecification, mode: MapMode, mapPx: numb
 }
 
 // `color` turns a token into its CSS value (read from the page at runtime, so the hex
-// values live only in globals.css). Opacity is dropped so every color is exactly a token.
+// values live only in globals.css). Opacity is dropped so every color is exactly a token
+// (except the building outlines' own, see buildingOutline).
 // The paint values are smooth mode's, which pass style validation; the map applies pixel
 // mode's with modePaints once the style has loaded.
 export function pixelStyle(base: StyleSpecification, color: (token: MapToken) => string): StyleSpecification {
   const layers = base.layers.flatMap((layer): LayerSpecification[] => {
     const token = LAYER_TOKENS[layer.id];
     if (!token || (layer.type !== "background" && layer.type !== "fill" && layer.type !== "line")) return [];
-    // No outlines: Positron outlines its buildings.
+    // Positron's own building outline (fill-outline-color) is dropped: it's a 1-device-pixel
+    // hairline, a third of a CSS pixel on a phone. buildingOutline draws a real one.
     const paint = Object.entries(layer.paint ?? {}).filter(
       ([name]) => !name.endsWith("-opacity") && name !== "fill-outline-color",
     );
@@ -157,6 +190,7 @@ export function pixelStyle(base: StyleSpecification, color: (token: MapToken) =>
       ...(MIN_ZOOMS[layer.id] !== undefined && { minzoom: MIN_ZOOMS[layer.id] }),
       paint: { ...Object.fromEntries(paint), [`${layer.type}-color`]: color(token), ...smoothPaint(layer) },
     } as LayerSpecification;
+    if (kept.type === "fill" && kept.id === "building") return [kept, buildingOutline(kept, color)];
     // Above the land, below the water: the tiles' seas and lakes cover any spill past the coast,
     // so the coastline is always the tiles' own. The borders stay on top. Shown only in pixel
     // mode (the map switches its visibility), so it starts hidden, like smooth mode.

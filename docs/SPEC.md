@@ -468,13 +468,13 @@ Display labels: "Food", "Cafe", "Bar", "Museum", "Landmark", "Park & Nature", "S
 - Zoom controls styled as pixel buttons (+ / −), top-right, as in the sheet, with the legend button below them (§13.6).
 
 ### 13.2 Map style
-- Start from an OpenFreeMap style and recolor using **only palette tokens**: flat colors, no gradients, no hillshading, no 3D buildings.
+- Start from an OpenFreeMap style and recolor using **only palette tokens**: flat colors, no gradients, no hillshading, no 3D buildings. One approved exception: the building outlines' opacity (below).
   - Water: Map Ocean `#3E7774`
   - Land/background: Map Land `#8DAA63`
   - Country borders: Map Border `#6B6A5B`
   - Roads (visible when zoomed in): Surface Dark `#C9B995`; major roads Surface `#E7D8B7`
   - Parks/green areas: keep Map Land unless another palette color reads better
-  - Buildings: flat 2D footprints from the tiles' building layer in Map Border `#6B6A5B`, with no outline, extrusion, or 3D, from zoom 15 (so only in smooth mode). They're drawn above land and water and below every road, so streets stay readable.
+  - Buildings: flat 2D footprints from the tiles' building layer in Map Border `#6B6A5B`, from zoom 15 (so only in smooth mode), each with a thin outline (1px, 2px by zoom 18) in Text `#2D201C` at **60% opacity**, so touching buildings stay apart. The opacity is an approved exception to exact tokens only: no token sits between Text and Map Border, and full-strength Text is too heavy. No extrusion or 3D. Footprints and outlines are drawn above land and water and below every road, so streets stay readable.
 - **Remove all text/label layers** (text turns to mush when pixelated). Place names appear only in our own HTML UI. With no text layers, the style doesn't need glyphs.
 - POI icons off.
 
