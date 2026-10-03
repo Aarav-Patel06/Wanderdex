@@ -49,6 +49,6 @@ function redirect(request: NextRequest, from: NextResponse, path: string) {
 }
 
 export const config = {
-  // Everything except Next's static files and images (sprites, favicon).
-  matcher: ["/((?!_next/static|_next/image|.*\\.(?:png|svg|ico|jpg|jpeg|gif|webp)$).*)"],
+  // Everything except Next's static files, images (sprites, favicon), and the country shapes.
+  matcher: ["/((?!_next/static|_next/image|.*\\.(?:png|svg|ico|jpg|jpeg|gif|webp|geojson)$).*)"],
 };

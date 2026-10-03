@@ -474,13 +474,16 @@ Display labels: "Food", "Cafe", "Bar", "Museum", "Landmark", "Park & Nature", "S
   - Country borders: Map Border `#6B6A5B`
   - Roads (visible when zoomed in): Surface Dark `#C9B995`; major roads Surface `#E7D8B7`
   - Parks/green areas: keep Map Land unless another palette color reads better
+  - Buildings: flat 2D footprints from the tiles' building layer in Map Border `#6B6A5B`, with no outline, extrusion, or 3D, from zoom 15 (so only in smooth mode). They're drawn above land and water and below every road, so streets stay readable.
 - **Remove all text/label layers** (text turns to mush when pixelated). Place names appear only in our own HTML UI. With no text layers, the style doesn't need glyphs.
 - POI icons off.
 
 ### 13.3 Visited countries
-- Load `public/geo/countries.geojson` (Natural Earth admin-0, simplified).
+- Load `public/geo/countries.geojson` (Natural Earth admin-0, simplified; the source and steps to regenerate it are in the README) once the map has first drawn, without holding up the pins. If it fails to load, the map works without the fill.
 - Match countries on the `ISO_A2_EH` property (plain `ISO_A2` is `-99` for some countries, such as France and Norway).
-- Fill layer in Visited Country `#F5A830`, filtered to the user's distinct `country_code`s, drawn below the borders.
+- Fill layer in Visited Country `#F5A830`, filtered to the user's distinct `country_code`s (from the places loaded for the pins), drawn above the land but below the water, so the tiles' seas and lakes hide any spill and the coastline is always the tiles' own; the borders stay on top. The shapes are grown slightly out to sea along the coasts, so no land gap shows there.
+- **Only in the zoomed-out view:** the fill shows in pixel mode, with hard edges (fill antialiasing off), and hides in smooth mode. It switches with the mode (§13.1), so the pixelation and the fill always change together.
+- A save adds its country to the fill at once. Deleting the last visit in a country removes it the next time the Overworld loads.
 
 ### 13.4 Pins (important implementation detail)
 - **Pins must be HTML markers, not MapLibre symbol layers.** Everything drawn inside the map canvas gets pixelated by the low `pixelRatio`, which would destroy the 32×32 sprites. HTML markers sit above the canvas and stay crisp.
@@ -495,7 +498,7 @@ Display labels: "Food", "Cafe", "Bar", "Museum", "Landmark", "Park & Nature", "S
 
 ### 13.6 Map legend
 - A pixel icon button (Pixelarticons, 44px) below the zoom buttons toggles a legend card. Closed by default.
-- The card is a pixel card on `surface` titled "MAP LEGEND". It lists all 10 category sprites with their §12.5 labels, in that order, plus the cluster pin labelled "Group". Compact: tight rows, labels in Small (desktop) or Tiny (phones), sprites at 32px (§16.7).
+- The card is a pixel card on `surface` titled "MAP LEGEND". It lists all 10 category sprites with their §12.5 labels, in that order, plus the cluster pin labelled "Group" and a 32px `visited` swatch labelled "Visited country". Compact: tight rows, labels in Small (desktop) or Tiny (phones), sprites at 32px (§16.7).
 - Desktop: it opens beside the map controls, top-aligned with them, in one column. Phones: it opens below the map controls, across the map's width, in a two-column grid. It never covers the zoom buttons, the legend button, the attribution, or the tab bar (the buttons stay tappable while it's open), and it scrolls inside only when it's taller than the space.
 
 ---

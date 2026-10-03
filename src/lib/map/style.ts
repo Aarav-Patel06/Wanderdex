@@ -1,21 +1,24 @@
-import type { LayerSpecification, StyleSpecification } from "maplibre-gl";
+import type { ExpressionSpecification, LayerSpecification, StyleSpecification } from "maplibre-gl";
 
 // OpenFreeMap's Positron, the plainest of its styles (SPEC §12.4). Recolored by pixelStyle.
 export const BASE_STYLE_URL = "https://tiles.openfreemap.org/styles/positron";
 
-export type MapToken = "--map-land" | "--map-ocean" | "--map-border" | "--surface" | "--surface-dark";
+export type MapToken = "--map-land" | "--map-ocean" | "--map-border" | "--surface" | "--surface-dark" | "--visited";
 
 // The hybrid map (SPEC §13.1): pixelated at world zoom, smooth once zoomed in.
 export type MapMode = "pixel" | "smooth";
 
 // The only Positron layers kept, each with its palette token (SPEC §13.2). Everything else
-// is dropped: labels, road shields, POI icons, landcover, parks, buildings, railways, and
-// state borders. With an allowlist, a new or renamed upstream layer disappears instead of
-// sneaking a label back in.
+// is dropped: labels, road shields, POI icons, landcover, parks, railways, and state borders.
+// With an allowlist, a new or renamed upstream layer disappears instead of sneaking a label
+// back in.
 const LAYER_TOKENS: Record<string, MapToken> = {
   background: "--map-land",
   water: "--map-ocean",
   waterway: "--map-ocean",
+  // Flat 2D footprints (SPEC §13.2): Positron draws them above water and below every road, so
+  // streets stay readable on top of them.
+  building: "--map-border",
   boundary_2: "--map-border",
   boundary_disputed: "--map-border",
   highway_path: "--surface-dark",
@@ -62,6 +65,19 @@ const SMOOTH_WIDTHS: Record<string, unknown> = {
   highway_motorway_bridge_inner: MOTORWAY_WIDTH,
   tunnel_motorway_inner: MOTORWAY_WIDTH,
 };
+
+// Buildings from street zoom only, far above the smooth threshold, so they're never pixelated.
+const MIN_ZOOMS: Record<string, number> = { building: 15 };
+
+// The visited-country fill (SPEC §13.3): Natural Earth shapes (public/geo/countries.geojson),
+// loaded into the empty source once the map has drawn, filtered to the user's countries.
+export const VISITED_LAYER = "visited";
+export const COUNTRIES_SOURCE = "countries";
+export const COUNTRIES_URL = "/geo/countries.geojson";
+
+export function visitedFilter(countryCodes: string[]): ExpressionSpecification {
+  return ["in", ["get", "ISO_A2_EH"], ["literal", countryCodes]];
+}
 
 // Hysteresis for the zoom switches: half a zoom level, so a zoom resting near a threshold
 // can't flip back and forth.
@@ -132,19 +148,37 @@ export function pixelStyle(base: StyleSpecification, color: (token: MapToken) =>
   const layers = base.layers.flatMap((layer): LayerSpecification[] => {
     const token = LAYER_TOKENS[layer.id];
     if (!token || (layer.type !== "background" && layer.type !== "fill" && layer.type !== "line")) return [];
-    const paint = Object.entries(layer.paint ?? {}).filter(([name]) => !name.endsWith("-opacity"));
-    return [
-      {
-        ...layer,
-        paint: { ...Object.fromEntries(paint), [`${layer.type}-color`]: color(token), ...smoothPaint(layer) },
-      } as LayerSpecification,
-    ];
+    // No outlines: Positron outlines its buildings.
+    const paint = Object.entries(layer.paint ?? {}).filter(
+      ([name]) => !name.endsWith("-opacity") && name !== "fill-outline-color",
+    );
+    const kept = {
+      ...layer,
+      ...(MIN_ZOOMS[layer.id] !== undefined && { minzoom: MIN_ZOOMS[layer.id] }),
+      paint: { ...Object.fromEntries(paint), [`${layer.type}-color`]: color(token), ...smoothPaint(layer) },
+    } as LayerSpecification;
+    // Above the land, below the water: the tiles' seas and lakes cover any spill past the coast,
+    // so the coastline is always the tiles' own. The borders stay on top. Shown only in pixel
+    // mode (the map switches its visibility), so it starts hidden, like smooth mode.
+    if (layer.id !== "background") return [kept];
+    const visited: LayerSpecification = {
+      id: VISITED_LAYER,
+      type: "fill",
+      source: COUNTRIES_SOURCE,
+      filter: visitedFilter([]),
+      layout: { visibility: "none" },
+      paint: { "fill-color": color("--visited"), ...smoothPaint({ id: VISITED_LAYER, type: "fill" }) },
+    };
+    return [kept, visited];
   });
 
   // No text or icon layers are left, so glyphs and the sprite go too (SPEC §13.2),
   // along with sources nothing draws (Positron's shaded-relief raster).
   const used = new Set(layers.map((layer) => ("source" in layer ? layer.source : null)));
-  const sources = Object.fromEntries(Object.entries(base.sources).filter(([id]) => used.has(id)));
+  const sources = {
+    ...Object.fromEntries(Object.entries(base.sources).filter(([id]) => used.has(id))),
+    [COUNTRIES_SOURCE]: { type: "geojson", data: { type: "FeatureCollection", features: [] } },
+  } satisfies StyleSpecification["sources"];
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { glyphs, sprite, ...rest } = base;
   // No transitions, so a mode switch snaps instead of easing the line widths over 300 ms.

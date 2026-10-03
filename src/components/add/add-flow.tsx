@@ -152,6 +152,7 @@ export function AddFlow() {
       category: visit.category,
       city: place.city,
       country: place.country,
+      country_code: place.country_code,
       lat: place.lat,
       lng: place.lng,
     });

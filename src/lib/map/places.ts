@@ -7,6 +7,7 @@ export type MapPlace = {
   category: Category;
   city: string | null;
   country: string | null;
+  country_code: string | null;
   lat: number;
   lng: number;
   visits: number;
@@ -40,6 +41,12 @@ export function addVisit(places: MapPlace[], pin: NewPin): MapPlace[] {
   const known = places.find((place) => place.id === pin.id);
   if (!known) return [...places, { ...pin, visits: 1 }];
   return places.map((place) => (place === known ? { ...pin, visits: known.visits + 1 } : place));
+}
+
+// The user's distinct countries, for the visited-country fill (SPEC §13.3). Places without a
+// country code don't count.
+export function countryCodes(places: MapPlace[]): string[] {
+  return [...new Set(places.flatMap((place) => (place.country_code ? [place.country_code] : [])))].sort();
 }
 
 export function clusterLabel(count: number) {

@@ -4,6 +4,7 @@ import {
   addVisit,
   clusterLabel,
   clusterZoomAt,
+  countryCodes,
   type MapPlace,
   mapZoomFor,
   pinSizeAt,
@@ -11,8 +12,8 @@ import {
   selectedPinSize,
 } from "@/lib/map/places";
 
-const ICHIRAN = { id: "a", name: "Ichiran Shibuya", city: "Tokyo", country: "Japan", lat: 35.66, lng: 139.7 };
-const TATE = { id: "b", name: "Tate Modern", city: "London", country: "United Kingdom", lat: 51.51, lng: -0.1 };
+const ICHIRAN = { id: "a", name: "Ichiran Shibuya", city: "Tokyo", country: "Japan", country_code: "JP", lat: 35.66, lng: 139.7 };
+const TATE = { id: "b", name: "Tate Modern", city: "London", country: "United Kingdom", country_code: "GB", lat: 51.51, lng: -0.1 };
 
 describe("placesFromVisits", () => {
   it("makes one pin per place, counting its visits", () => {
@@ -55,6 +56,20 @@ describe("addVisit", () => {
     expect(addVisit(places, { ...ICHIRAN, category: "bar" })).toEqual([
       { ...ICHIRAN, category: "bar", visits: 3 },
     ]);
+  });
+});
+
+describe("countryCodes", () => {
+  it("lists each country once, skipping places without a code", () => {
+    const pin = (id: string, country_code: string | null): MapPlace => ({
+      ...ICHIRAN,
+      id,
+      country_code,
+      category: "food",
+      visits: 1,
+    });
+    expect(countryCodes([pin("a", "JP"), pin("b", "GB"), pin("c", "JP"), pin("d", null)])).toEqual(["GB", "JP"]);
+    expect(countryCodes([])).toEqual([]);
   });
 });
 

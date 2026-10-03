@@ -1,7 +1,7 @@
 import type { StyleSpecification } from "maplibre-gl";
 import { describe, expect, it } from "vitest";
 
-import { blockAt, mapPixelRatio, minZoomFor, modeAt, modePaints, pixelStyle } from "@/lib/map/style";
+import { blockAt, mapPixelRatio, minZoomFor, modeAt, modePaints, pixelStyle, visitedFilter } from "@/lib/map/style";
 
 const LINES = ["match", ["geometry-type"], ["LineString", "MultiLineString"], true, false];
 
@@ -25,6 +25,14 @@ const POSITRON = {
       paint: { "fill-antialias": true, "fill-color": "grey" },
     },
     { id: "waterway", type: "line", source: "openmaptiles", "source-layer": "waterway", paint: { "line-color": "grey" } },
+    {
+      id: "building",
+      type: "fill",
+      source: "openmaptiles",
+      "source-layer": "building",
+      minzoom: 12,
+      paint: { "fill-antialias": true, "fill-color": "#eee", "fill-outline-color": "#ddd" },
+    },
     {
       id: "highway_minor",
       type: "line",
@@ -72,8 +80,10 @@ describe("pixelStyle", () => {
   it("keeps only the allowlisted layers", () => {
     expect(style.layers.map((layer) => layer.id)).toEqual([
       "background",
+      "visited",
       "water",
       "waterway",
+      "building",
       "highway_minor",
       "highway_major_inner",
       "boundary_2",
@@ -88,8 +98,10 @@ describe("pixelStyle", () => {
     });
     expect(colors).toEqual([
       "var(--map-land)",
+      "var(--visited)",
       "var(--map-ocean)",
       "var(--map-ocean)",
+      "var(--map-border)",
       "var(--surface-dark)",
       "var(--surface)",
       "var(--map-border)",
@@ -119,10 +131,33 @@ describe("pixelStyle", () => {
     expect(style.transition).toEqual({ duration: 0, delay: 0 });
   });
 
-  it("drops glyphs, the sprite, and unused sources", () => {
+  it("drops glyphs, the sprite, and unused sources, and adds an empty source for the country shapes", () => {
     expect(style).not.toHaveProperty("glyphs");
     expect(style).not.toHaveProperty("sprite");
-    expect(Object.keys(style.sources)).toEqual(["openmaptiles"]);
+    expect(Object.keys(style.sources)).toEqual(["openmaptiles", "countries"]);
+    expect(style.sources.countries).toEqual({ type: "geojson", data: { type: "FeatureCollection", features: [] } });
+  });
+
+  it("draws buildings as flat footprints from zoom 15, with no outline", () => {
+    expect(layer("building")).toMatchObject({ type: "fill", minzoom: 15 });
+    expect(layer("building")?.paint).toEqual({ "fill-antialias": true, "fill-color": "var(--map-border)" });
+  });
+
+  it("adds the visited-country fill above the land and below the water, hidden and matching no country", () => {
+    expect(layer("visited")).toEqual({
+      id: "visited",
+      type: "fill",
+      source: "countries",
+      filter: ["in", ["get", "ISO_A2_EH"], ["literal", []]],
+      layout: { visibility: "none" },
+      paint: { "fill-color": "var(--visited)", "fill-antialias": true },
+    });
+  });
+});
+
+describe("visitedFilter", () => {
+  it("matches the countries on ISO_A2_EH", () => {
+    expect(visitedFilter(["FR", "JP"])).toEqual(["in", ["get", "ISO_A2_EH"], ["literal", ["FR", "JP"]]]);
   });
 });
 
@@ -130,8 +165,10 @@ describe("modePaints", () => {
   it("in pixel mode: hard fill edges, 2-map-pixel roads, crisp 1-map-pixel borders, no rivers or disputed borders", () => {
     const pixel = paintOf("pixel", 3);
     expect(pixel).toEqual({
+      "visited fill-antialias": false,
       "water fill-antialias": false,
       "waterway line-width": 0,
+      "building fill-antialias": false,
       "highway_minor line-width": 6,
       "highway_major_inner line-width": 6,
       "boundary_2 line-width": expect.closeTo(0.06),

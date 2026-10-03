@@ -1,11 +1,12 @@
 "use client";
 
-import { type CSSProperties, useEffect, useId, useMemo, useRef, useState } from "react";
+import { type CSSProperties, type ReactNode, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import Image from "next/image";
 import Link from "next/link";
 import {
+  type GeoJSONSource,
   LngLatBounds,
   type LngLatBoundsLike,
   Map as MapLibreMap,
@@ -27,6 +28,7 @@ import { CATEGORIES, type Category, CATEGORY_LABELS, categorySprite } from "@/li
 import {
   clusterLabel,
   clusterZoomAt,
+  countryCodes,
   type MapPlace,
   mapZoomFor,
   type NewPin,
@@ -36,6 +38,8 @@ import {
 import {
   BASE_STYLE_URL,
   blockAt,
+  COUNTRIES_SOURCE,
+  COUNTRIES_URL,
   type MapMode,
   mapPixelRatio,
   type MapToken,
@@ -43,6 +47,8 @@ import {
   modeAt,
   modePaints,
   pixelStyle,
+  VISITED_LAYER,
+  visitedFilter,
 } from "@/lib/map/style";
 import { cn } from "@/lib/utils";
 
@@ -176,6 +182,7 @@ export function MapView({
   }, [places]);
 
   const selected = places.find((place) => place.id === selectedId) ?? null;
+  const visitedCountries = useMemo(() => countryCodes(places), [places]);
 
   useEffect(() => {
     let cancelled = false;
@@ -212,7 +219,13 @@ export function MapView({
         map.fitBounds(startBounds, { padding: FIT_PADDING, maxZoom: START_MAX_ZOOM, duration: 0 });
         setPinSize(pinSizeAt(map.getZoom()));
         map.on("moveend", () => setPinSize(pinSizeAt(map.getZoom())));
-        map.once("load", () => setLoaded(true));
+        // The country shapes load once the map has drawn, so they hold up neither the first draw
+        // nor the pins. MapLibre fetches and parses them off the main thread; if that fails, it
+        // logs the error and the map carries on without the fill.
+        map.once("load", () => {
+          setLoaded(true);
+          map.getSource<GeoJSONSource>(COUNTRIES_SOURCE)?.setData(COUNTRIES_URL);
+        });
 
         // Stop zooming out once the world is as wide as the map: further out, the pixels swallow
         // countries. MapLibre fires resize for container size changes, orientation changes
@@ -252,6 +265,9 @@ export function MapView({
           for (const [id, name, value] of modePaints(style, mode, mapPx())) {
             map.setPaintProperty(id, name, value, { validate: false });
           }
+          // The visited-country fill is pixel mode's only (SPEC §13.3), so it and the
+          // pixelation always change together.
+          map.setLayoutProperty(VISITED_LAYER, "visibility", mode === "pixel" ? "visible" : "none");
           if (map.getPixelRatio() !== pixelRatio()) map.setPixelRatio(pixelRatio());
         };
 
@@ -331,6 +347,11 @@ export function MapView({
       shown.clear();
     };
   }, [map, index]);
+
+  // The style is ready from the first full draw. setFilter skips an unchanged filter.
+  useEffect(() => {
+    if (map && loaded) map.setFilter(VISITED_LAYER, visitedFilter(visitedCountries));
+  }, [map, loaded, visitedCountries]);
 
   useEffect(() => {
     if (map) syncPadding(map);
@@ -546,9 +567,14 @@ function MapLegend({ id }: { id: string }) {
         <CardContent className="min-h-0 overflow-y-auto">
           <ul className="grid grid-cols-2 gap-x-4 gap-y-1 text-tiny md:grid-cols-1 md:text-small">
             {CATEGORIES.map((category) => (
-              <LegendRow key={category} sprite={categorySprite(category)} label={CATEGORY_LABELS[category]} />
+              <LegendRow
+                key={category}
+                icon={<LegendSprite src={categorySprite(category)} />}
+                label={CATEGORY_LABELS[category]}
+              />
             ))}
-            <LegendRow sprite="/sprites/pin_group.png" label="Group" />
+            <LegendRow icon={<LegendSprite src="/sprites/pin_group.png" />} label="Group" />
+            <LegendRow icon={<span className="size-8 shrink-0 bg-visited" />} label="Visited country" />
           </ul>
         </CardContent>
       </Card>
@@ -556,11 +582,15 @@ function MapLegend({ id }: { id: string }) {
   );
 }
 
-function LegendRow({ sprite, label }: { sprite: string; label: string }) {
+function LegendRow({ icon, label }: { icon: ReactNode; label: string }) {
   return (
     <li className="flex items-center gap-2">
-      <Image src={sprite} alt="" width={32} height={32} unoptimized className="pixelated shrink-0" />
+      {icon}
       {label}
     </li>
   );
+}
+
+function LegendSprite({ src }: { src: string }) {
+  return <Image src={src} alt="" width={32} height={32} unoptimized className="pixelated shrink-0" />;
 }

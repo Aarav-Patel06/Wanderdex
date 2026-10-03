@@ -69,6 +69,15 @@ pnpm start   # serve the production build locally (after pnpm build)
 
 To try it on a phone on the same Wi-Fi, open the **Network** address that `pnpm dev` prints (e.g. `http://192.168.1.20:3000`).
 
+### Country shapes
+
+[`public/geo/countries.geojson`](public/geo/countries.geojson) (the visited-country fill, SPEC §13.3) is made from Natural Earth's 1:50m admin-0 countries (public domain), release v5.1.2. It keeps only `ISO_A2_EH`, is grown 8 km out to sea along the coasts (not across land borders; the map's water hides the excess), and is simplified to about 5 km. To regenerate it, from the repo root (mapshaper runs once through `pnpm dlx`; it isn't a dependency):
+
+```powershell
+Invoke-WebRequest https://raw.githubusercontent.com/nvkelso/natural-earth-vector/v5.1.2/geojson/ne_50m_admin_0_countries.geojson -OutFile "$env:TEMP\ne_50m_admin_0_countries.geojson"
+pnpm dlx mapshaper@0.7.72 -i "$env:TEMP\ne_50m_admin_0_countries.geojson" -filter-fields ISO_A2_EH -buffer 8km topological quad-segs=2 -simplify interval=5000 keep-shapes -o public/geo/countries.geojson precision=0.01
+```
+
 ## Deployment
 
 Production runs on Vercel (Hobby), connected to this repo: pushes to `main` deploy to production, and pull requests get preview deployments. Set the same variables as `.env.local` (except `ANTHROPIC_API_KEY`) under the Vercel project's Settings → Environment Variables.

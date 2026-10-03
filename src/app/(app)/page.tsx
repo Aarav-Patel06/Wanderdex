@@ -12,7 +12,7 @@ export default async function OverworldPage() {
   // The user's session applies, so RLS returns only their own visits (SPEC §9).
   const { data, error } = await supabase
     .from("visits")
-    .select("category, place:places(id, name, city, country, lat, lng)")
+    .select("category, place:places(id, name, city, country, country_code, lat, lng)")
     .order("created_at", { ascending: false })
     // Untyped client: it can't tell that `place` is many-to-one (one object, not an array).
     .overrideTypes<VisitRow[], { merge: false }>();
