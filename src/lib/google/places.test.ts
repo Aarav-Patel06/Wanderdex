@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  type CallGate,
   FIELD_MASK,
   nearbySearch,
   nearbySearchWithRetry,
@@ -8,6 +9,9 @@ import {
   textSearch,
   toCandidate,
 } from "@/lib/google/places";
+
+// No monthly cap here (lib/rate-limit has its own tests).
+const noCap: CallGate = async () => {};
 
 // Shaped like a real Places API (New) response with the §12.1 field mask.
 const CREPE_STATION = {
@@ -54,7 +58,7 @@ afterEach(() => {
 describe("textSearch", () => {
   it("sends the §12.1 request with the exact field mask", async () => {
     const fetchMock = mockFetch(places(CREPE_STATION));
-    await textSearch("Crêpe Station", { lat: 48.8694204, lng: 2.2890529 });
+    await textSearch(noCap, "Crêpe Station", { lat: 48.8694204, lng: 2.2890529 });
 
     const { url, headers, body } = sent(fetchMock);
     expect(url).toBe("https://places.googleapis.com/v1/places:searchText");
@@ -73,13 +77,13 @@ describe("textSearch", () => {
 
   it("leaves out the bias without coordinates", async () => {
     const fetchMock = mockFetch(places());
-    await textSearch("ramen in shibuya");
+    await textSearch(noCap, "ramen in shibuya");
     expect(sent(fetchMock).body).toEqual({ textQuery: "ramen in shibuya", pageSize: 3, languageCode: "en" });
   });
 
   it("normalizes results into candidates", async () => {
     mockFetch(places(CREPE_STATION));
-    expect(await textSearch("Crêpe Station")).toEqual([
+    expect(await textSearch(noCap, "Crêpe Station")).toEqual([
       {
         google_place_id: "ChIJR1L1HsVv5kcRGFJMXEYNkdQ",
         name: "Crêpe Station",
@@ -98,18 +102,18 @@ describe("textSearch", () => {
 
   it("returns [] when Google sends no places", async () => {
     mockFetch(Response.json({}));
-    expect(await textSearch("zzzz")).toEqual([]);
+    expect(await textSearch(noCap, "zzzz")).toEqual([]);
   });
 
   it("throws PlacesError with Google's status", async () => {
     mockFetch(Response.json({ error: { status: "RESOURCE_EXHAUSTED" } }, { status: 429 }));
     vi.spyOn(console, "error").mockImplementation(() => {});
-    await expect(textSearch("x")).rejects.toMatchObject({ status: 429 });
+    await expect(textSearch(noCap, "x")).rejects.toMatchObject({ status: 429 });
   });
 
   it("throws PlacesError(null) on a network error or timeout", async () => {
     vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockRejectedValue(new DOMException("t", "TimeoutError")));
-    const error = await textSearch("x").catch((e: unknown) => e);
+    const error = await textSearch(noCap, "x").catch((e: unknown) => e);
     expect(error).toBeInstanceOf(PlacesError);
     expect((error as PlacesError).status).toBeNull();
   });
@@ -118,7 +122,7 @@ describe("textSearch", () => {
 describe("nearbySearch", () => {
   it("sends the §12.1 request", async () => {
     const fetchMock = mockFetch(places(CREPE_STATION));
-    await nearbySearch({ lat: 1.5, lng: -2.5 }, 50);
+    await nearbySearch(noCap, { lat: 1.5, lng: -2.5 }, 50);
 
     const { url, headers, body } = sent(fetchMock);
     expect(url).toBe("https://places.googleapis.com/v1/places:searchNearby");
@@ -135,19 +139,19 @@ describe("nearbySearch", () => {
 describe("nearbySearchWithRetry", () => {
   it("stops at 50 m when it finds something", async () => {
     const fetchMock = mockFetch(places(CREPE_STATION));
-    expect(await nearbySearchWithRetry({ lat: 1, lng: 2 })).toHaveLength(1);
+    expect(await nearbySearchWithRetry(noCap, { lat: 1, lng: 2 })).toHaveLength(1);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("retries once at 150 m", async () => {
     const fetchMock = mockFetch(places(), places(CREPE_STATION));
-    expect(await nearbySearchWithRetry({ lat: 1, lng: 2 })).toHaveLength(1);
+    expect(await nearbySearchWithRetry(noCap, { lat: 1, lng: 2 })).toHaveLength(1);
     expect(sent(fetchMock, 1).body.locationRestriction.circle.radius).toBe(150);
   });
 
   it("gives up after 150 m", async () => {
     const fetchMock = mockFetch(places(), places());
-    expect(await nearbySearchWithRetry({ lat: 1, lng: 2 })).toEqual([]);
+    expect(await nearbySearchWithRetry(noCap, { lat: 1, lng: 2 })).toEqual([]);
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });

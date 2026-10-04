@@ -133,7 +133,7 @@ Next.js server (Vercel)
  ├─ /api/places/[id]/category → the user's category for a place (their visits only)
  └─ /api/health          → trivial DB query (keep-alive target)
         │
-        ├─► Supabase Postgres (profiles, places, visits, resolve_log)
+        ├─► Supabase Postgres (profiles, places, visits, resolve_log, google_call_log)
         ├─► Google Places API (New)   [secret key, server only]
         └─► Gemini API                [secret key, server only]
 
@@ -270,6 +270,15 @@ create table resolve_log (
   created_at timestamptz not null default now()
 );
 create index resolve_log_user_time_idx on resolve_log (user_id, created_at desc);
+
+-- For the global monthly cap per Google SKU (§17): one row per Google Places call
+create table google_call_log (
+  id         bigint generated always as identity primary key,
+  sku        text not null check (sku in ('text_search', 'nearby_search')),
+  user_id    uuid references auth.users(id) on delete set null, -- who caused it; kept counted if deleted
+  created_at timestamptz not null default now()
+);
+create index google_call_log_sku_time_idx on google_call_log (sku, created_at);
 ```
 
 **Why `category` is on `visits`:** `places` is shared across users, so one user's category edit must not change it for everyone. `places.category` is the auto-detected default; each visit copies it at creation. **One category per user per place:** when a user edits the category on a place detail page, update **all of that user's visits for that place**, so their pin stays consistent. The pin uses that category. The same applies when a save adds a visit at a place where the user already has visits (by id, or a signed lookup of a place they've logged) in a different category: all of their visits there take the new one (§11.6 step 4).
@@ -296,6 +305,7 @@ Enable RLS on every table.
 | `places` | Logged-in users can read rows where `google_place_id is not null`, **or** where `created_by = auth.uid()` (manual places are private to their creator). **No insert/update from the browser**; the server inserts with the secret key. |
 | `visits` | A user can select, insert, update, and delete only rows where `user_id = auth.uid()`. |
 | `resolve_log` | No browser access. Server only. |
+| `google_call_log` | No browser access. Server only. |
 
 ---
 
@@ -357,7 +367,7 @@ The add panel has **three separate modes** (as in the design sheet): **Paste Lin
 1. **Reachable** from every mode's panel ("Can't find it? Drop a pin"), from the "No places found" message (a "Drop a pin" button), and from the confirmation card after a lookup. From a photo, the pin starts at the photo's coordinates (if it had any) and the card gets the photo's date.
 2. **Placing:** the add panel gets out of the way (desktop: the bubble or card closes; phones: the drawer closes), and a "Drop a pin" card over the bottom of the map says what to do ("Click/Tap the map to drop a pin.", then "Pin dropped. Click/Tap again to move it.") with Confirm (once a pin is placed) and Cancel. A click or tap on the map places a pixel pin there; another moves it. Place pins don't open while placing. Escape, Cancel, or Add Visit gives up. Starting from a photo, the map flies to its coordinates (street zoom).
 3. **Confirm** opens the confirmation card for the new place (titled "New place"; desktop side panel, phone drawer): **Name** (required, at most 100 characters) instead of the candidates, **Category** (the 10, starting at Other), and the usual date & time with precision, rating, and note (§11.5). The date starts at the photo's date, or now, in the pin's time zone.
-4. **Saving** (`/api/visits`, a `manual_place` with the name and coordinates, zod-validated): the server works out city and country from the coordinates: a Nearby Search at the point (50 m, then 150 m), using the first result's address components with the §12.1 rules (Tokyo included). If there are none (or Google fails), the country comes from `public/geo/countries.geojson` by point-in-polygon (English name from its code) and the city stays empty. The time zone comes from the coordinates; the address stays null. It creates a `places` row with `google_place_id = null`, the chosen category, and `created_by = user` (private, §9), then the visit (source `manual`, no `source_input`). After that it's like any save (§11.6 steps 5–7): toasts, the pin, the map flying to it.
+4. **Saving** (`/api/visits`, a `manual_place` with the name and coordinates, zod-validated): the server works out city and country from the coordinates: a Nearby Search at the point (50 m, then 150 m), using the first result's address components with the §12.1 rules (Tokyo included). If there are none (or Google fails, or Nearby Search is at its monthly cap (§17), which skips the call), the country comes from `public/geo/countries.geojson` by point-in-polygon (English name from its code) and the city stays empty. The time zone comes from the coordinates; the address stays null. It creates a `places` row with `google_place_id = null`, the chosen category, and `created_by = user` (private, §9), then the visit (source `manual`, no `source_input`). After that it's like any save (§11.6 steps 5–7): toasts, the pin, the map flying to it.
 5. A return visit to a manual place uses the place's id ("Add another visit", §14.4). A manual place whose last visit is deleted stays in the database, private and unused (§8).
 
 ### 11.5 Confirmation card
@@ -710,8 +720,9 @@ Toasts auto-dismiss after ~4 s and have a close (×) button. Copy is in §11.6 a
 - Secret keys only in server code and Vercel env vars. Never prefixed `NEXT_PUBLIC_`.
 - **Google Cloud, day one:** API key restricted to Places API (New) only; a **budget alert** (e.g. $5) on the billing account; **daily quota caps** on Text Search and Nearby Search (e.g. 150/day each: `SearchTextRequest` and `SearchNearbyRequest`). Google requires a card on file, which is why these matter. While the billing account is on the Free Trial, the Places API (New) quota settings are locked; set the caps when upgrading (see `DECISIONS.md`).
 - Field masks limited as in §12.1.
-- **Per-user rate limit** on `/api/resolve/*`: log each call in `resolve_log`; reject above **60/hour or 300/day** per user (adjustable).
-- **Global monthly cap per Google SKU** (Phase 2, with the per-user limit): about **4,500 calls/month** each for Text Search and Nearby Search, counting actual Google API calls across all users (a Nearby retry at 150 m counts as two calls). When a cap is hit, lookups return the rate-limit error. `resolve_log` counts lookups per user, not Google calls per SKU, so this likely needs a small migration.
+- **Per-user rate limit** on `/api/resolve/*` and on manual-place saves (they call Nearby Search, §11.4): before any work, check, then log each one in `resolve_log` (`kind` `link`, `text`, or `nearby`); reject with the rate-limit error (`rate_limited`, 429, §11.7) once the user has **60 in the last hour or 300 in the last 24 hours**. Rejected requests aren't logged.
+- **Global monthly cap per Google SKU** (built): **4,500 calls/month** each for Text Search and Nearby Search, per calendar month (UTC), counting actual Google API calls across all users in `google_call_log` (a Nearby retry at 150 m counts as two calls; a manual-place save's Nearby calls count too). Before each Google call, if its SKU has reached the cap, the call is skipped and a lookup stops with the rate-limit error; a manual-place save instead uses its country-shapes fallback (§11.4), so pins stay saveable. Otherwise the call is logged and made. Google's free allowance is 5,000 per SKU; the margin covers simultaneous requests slightly overshooting.
+- All limits live in one config file, `src/lib/rate-limits.ts`.
 - All route handlers check the Supabase session and validate input with zod.
 - RLS on every table (§9).
 - Photos never leave the browser.

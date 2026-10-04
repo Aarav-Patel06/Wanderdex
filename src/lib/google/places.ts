@@ -31,6 +31,14 @@ export type Candidate = {
   lng: number;
 };
 
+// The billed SKU of each request (both Pro, DECISIONS.md), as the monthly caps count them.
+export type GoogleSku = "text_search" | "nearby_search";
+const SKU = { searchText: "text_search", searchNearby: "nearby_search" } as const;
+
+// Runs before every Google request (SPEC §17's monthly cap per SKU): it logs the call, or throws
+// to stop it. Required everywhere, so nothing reaches Google uncounted.
+export type CallGate = (sku: GoogleSku) => Promise<void>;
+
 // status is Google's HTTP status, or null for a network error or timeout.
 export class PlacesError extends Error {
   constructor(readonly status: number | null) {
@@ -50,8 +58,8 @@ type GooglePlace = {
   addressComponents?: AddressComponent[];
 };
 
-export function textSearch(query: string, bias?: LatLng | null) {
-  return search("searchText", {
+export function textSearch(gate: CallGate, query: string, bias?: LatLng | null) {
+  return search(gate, "searchText", {
     textQuery: query,
     pageSize: MAX_RESULTS,
     languageCode: LANGUAGE_CODE,
@@ -59,8 +67,8 @@ export function textSearch(query: string, bias?: LatLng | null) {
   });
 }
 
-export function nearbySearch(point: LatLng, radius: number) {
-  return search("searchNearby", {
+export function nearbySearch(gate: CallGate, point: LatLng, radius: number) {
+  return search(gate, "searchNearby", {
     locationRestriction: { circle: circle(point, radius) },
     rankPreference: "DISTANCE",
     maxResultCount: MAX_RESULTS,
@@ -68,11 +76,12 @@ export function nearbySearch(point: LatLng, radius: number) {
   });
 }
 
-// 50 m, then once more at 150 m if nothing was found (SPEC §11.2 step 4).
-export async function nearbySearchWithRetry(point: LatLng) {
+// 50 m, then once more at 150 m if nothing was found (SPEC §11.2 step 4). The retry is a second
+// call, so it passes the gate again.
+export async function nearbySearchWithRetry(gate: CallGate, point: LatLng) {
   let places: Candidate[] = [];
   for (const radius of NEARBY_RADII_M) {
-    places = await nearbySearch(point, radius);
+    places = await nearbySearch(gate, point, radius);
     if (places.length) break;
   }
   return places;
@@ -82,7 +91,8 @@ function circle({ lat, lng }: LatLng, radius: number) {
   return { center: { latitude: lat, longitude: lng }, radius };
 }
 
-async function search(method: "searchText" | "searchNearby", body: object) {
+async function search(gate: CallGate, method: "searchText" | "searchNearby", body: object) {
+  await gate(SKU[method]);
   let res: Response;
   try {
     res = await fetch(`${BASE}:${method}`, {

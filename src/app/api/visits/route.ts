@@ -1,8 +1,11 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+
 import { errorResponse, readBody, session } from "@/lib/api";
 import type { Category } from "@/lib/categories";
 import { timezoneAt, visitedAtUtc } from "@/lib/dates";
 import { placeArea } from "@/lib/manual-place";
 import { type PlaceFields, signingSecret, verifyPlace } from "@/lib/place-signature";
+import { googleCallGate, limitLookup, RateLimitError } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   alignCategory,
@@ -31,7 +34,10 @@ export async function POST(request: Request) {
     let place: SavedVisit["place"];
     let source: { source: "link" | "text" | "photo" | "manual"; source_input: string | null };
     if ("manual_place" in body) {
-      place = await createManualPlace(body.manual_place, body.category, userId);
+      // It calls Nearby Search, so it counts as a lookup (SPEC §17).
+      const admin = createAdminClient();
+      await limitLookup(admin, userId, "nearby");
+      place = await createManualPlace(admin, body.manual_place, body.category, userId);
       source = { source: "manual", source_input: null };
     } else if ("place_id" in body) {
       // Nothing about the place is written, so no signature: it only has to exist and be
@@ -80,6 +86,7 @@ export async function POST(request: Request) {
     const first_in_country = settledFlag(countryCheck, "first-in-country");
     return Response.json({ place, visit, return_visit, first_in_country } satisfies SavedVisit);
   } catch (error) {
+    if (error instanceof RateLimitError) return errorResponse("rate_limited");
     console.error("visits save failed:", error);
     return errorResponse("upstream_error");
   }
@@ -96,12 +103,13 @@ function settledFlag(result: PromiseSettledResult<boolean>, check: string) {
 // it has no Google ID, type, or address. Every save makes a new row: a return visit to it goes by
 // its id. If the visit insert then fails, the row stays, unused and visible to no one else.
 async function createManualPlace(
+  admin: SupabaseClient,
   { name, lat, lng }: ManualPlace,
   category: Category,
   userId: string,
 ): Promise<SavedVisit["place"]> {
-  const area = await placeArea({ lat, lng });
-  const { data, error } = await createAdminClient()
+  const area = await placeArea({ lat, lng }, googleCallGate(admin, userId));
+  const { data, error } = await admin
     .from("places")
     .insert({
       google_place_id: null,

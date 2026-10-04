@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { loadCountryShapes } from "@/lib/countries";
+import type { CallGate } from "@/lib/google/places";
 import { countryName, placeArea } from "@/lib/manual-place";
+import { RateLimitError } from "@/lib/rate-limit";
+
+// No monthly cap here (lib/rate-limit has its own tests).
+const noCap: CallGate = async () => {};
 
 const NEARBY = "https://places.googleapis.com/v1/places:searchNearby";
 
@@ -43,7 +48,7 @@ describe("placeArea", () => {
         ]),
       ),
     );
-    expect(await placeArea({ lat: 45.4642, lng: 9.19 })).toEqual({ city: "Milan", country: "Italy", country_code: "IT" });
+    expect(await placeArea({ lat: 45.4642, lng: 9.19 }, noCap)).toEqual({ city: "Milan", country: "Italy", country_code: "IT" });
   });
 
   it("follows the city rules, Tokyo included", async () => {
@@ -56,7 +61,7 @@ describe("placeArea", () => {
         ]),
       ),
     );
-    expect((await placeArea({ lat: 35.6595, lng: 139.7005 })).city).toBe("Tokyo");
+    expect((await placeArea({ lat: 35.6595, lng: 139.7005 }, noCap)).city).toBe("Tokyo");
   });
 
   it("retries at 150 m before giving up on Google", async () => {
@@ -64,13 +69,13 @@ describe("placeArea", () => {
       places(),
       places(place([{ longText: "Iceland", shortText: "IS", types: ["country"] }])),
     );
-    expect(await placeArea({ lat: 64.5, lng: -17.5 })).toEqual({ city: null, country: "Iceland", country_code: "IS" });
+    expect(await placeArea({ lat: 64.5, lng: -17.5 }, noCap)).toEqual({ city: null, country: "Iceland", country_code: "IS" });
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("with no results, takes the country from the shapes and leaves the city empty", async () => {
     mockNearby(places(), places());
-    expect(await placeArea({ lat: 64.5, lng: -17.5 }, loadCountryShapes)).toEqual({
+    expect(await placeArea({ lat: 64.5, lng: -17.5 }, noCap, loadCountryShapes)).toEqual({
       city: null,
       country: "Iceland",
       country_code: "IS",
@@ -79,7 +84,7 @@ describe("placeArea", () => {
 
   it("has neither out at sea", async () => {
     mockNearby(places(), places());
-    expect(await placeArea({ lat: 30, lng: -40 }, loadCountryShapes)).toEqual({
+    expect(await placeArea({ lat: 30, lng: -40 }, noCap, loadCountryShapes)).toEqual({
       city: null,
       country: null,
       country_code: null,
@@ -88,7 +93,7 @@ describe("placeArea", () => {
 
   it("falls back to the shapes when Google fails, without reading them otherwise", async () => {
     mockNearby(() => new Response("{}", { status: 429 }));
-    expect(await placeArea({ lat: -29.31, lng: 27.48 }, loadCountryShapes)).toEqual({
+    expect(await placeArea({ lat: -29.31, lng: 27.48 }, noCap, loadCountryShapes)).toEqual({
       city: null,
       country: "Lesotho",
       country_code: "LS",
@@ -96,8 +101,21 @@ describe("placeArea", () => {
 
     const shapes = vi.fn(loadCountryShapes);
     mockNearby(places(place([{ longText: "Italy", shortText: "IT", types: ["country"] }])));
-    await placeArea({ lat: 45.4642, lng: 9.19 }, shapes);
+    await placeArea({ lat: 45.4642, lng: 9.19 }, noCap, shapes);
     expect(shapes).not.toHaveBeenCalled();
+  });
+
+  it("falls back to the shapes at the monthly cap, without calling Google", async () => {
+    const fetchMock = mockNearby();
+    const capped: CallGate = async () => {
+      throw new RateLimitError();
+    };
+    expect(await placeArea({ lat: 45.4642, lng: 9.19 }, capped, loadCountryShapes)).toEqual({
+      city: null,
+      country: "Italy",
+      country_code: "IT",
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
 

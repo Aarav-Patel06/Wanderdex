@@ -6,12 +6,6 @@ import { createClient } from "@/lib/supabase/server";
 // Helpers for route handlers (SPEC §17: every handler checks the session and
 // validates its input with zod).
 
-export async function isLoggedIn() {
-  const supabase = await createClient();
-  const { data } = await supabase.auth.getClaims();
-  return Boolean(data?.claims);
-}
-
 // The user's session client (RLS applies) and their user id, or null when logged out.
 export async function session() {
   const supabase = await createClient();

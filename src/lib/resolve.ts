@@ -2,15 +2,16 @@ import { z } from "zod";
 
 import { type ParsedText, parseText } from "@/lib/ai/parse";
 import { timezoneAt, todayIn } from "@/lib/dates";
-import { type Candidate, nearbySearchWithRetry, PlacesError, textSearch } from "@/lib/google/places";
+import { type CallGate, type Candidate, nearbySearchWithRetry, PlacesError, textSearch } from "@/lib/google/places";
 import { isApplePlacePage, readApplePlace } from "@/lib/links/apple";
 import { ExpandError, expandLink } from "@/lib/links/expand";
 import { type LatLng, parseMapsLink } from "@/lib/links/parse";
 import { readMapsLink } from "@/lib/links/validate";
 import { type SignedPlace, signingSecret, signPlace } from "@/lib/place-signature";
+import { RateLimitError } from "@/lib/rate-limit";
 
 // The lookup pipeline behind /api/resolve/link, /api/resolve/text, and /api/resolve/nearby
-// (SPEC §11.1, §11.3, §11.2).
+// (SPEC §11.1, §11.3, §11.2). Every Google call goes through `gate`, the monthly cap (SPEC §17).
 
 // Stable error codes; the UI maps each one to its §11.7 copy.
 export const ERROR_STATUS = {
@@ -65,7 +66,7 @@ export const nearbyBodySchema = z.strictObject({
 // saved visit, and a photo visit has no source input (SPEC §8).
 export type NearbyResult = { candidates: ResolvedCandidate[] };
 
-export async function resolveLink(input: string): Promise<LinkResult> {
+export async function resolveLink(input: string, gate: CallGate): Promise<LinkResult> {
   // Before any upstream call: without the secret there are no signed results to return.
   const secret = signingSecret();
   const url = readMapsLink(input);
@@ -92,27 +93,32 @@ export async function resolveLink(input: string): Promise<LinkResult> {
 
   // A name searches by text (biased toward the coordinates); coordinates alone search nearby.
   const candidates = await findPlaces(
-    () => (name ? textSearch(name, location) : nearbySearchWithRetry(location!)),
+    () => (name ? textSearch(gate, name, location) : nearbySearchWithRetry(gate, location!)),
     name,
     secret,
   );
   return { candidates, visited: null, source_input: url.href, name };
 }
 
-export async function resolveText(text: string, timeZone: string, now = new Date()): Promise<ResolveResult> {
+export async function resolveText(
+  text: string,
+  timeZone: string,
+  gate: CallGate,
+  now = new Date(),
+): Promise<ResolveResult> {
   const secret = signingSecret();
   const parsed = await parseText({ text, today: todayIn(timeZone, now), timeZone });
 
   // Without the AI, search the raw text and let the date default to now (§11.3 step 4).
   const query = parsed ? [parsed.query, parsed.location_hint].filter(Boolean).join(" ") : text;
-  const candidates = await findPlaces(() => textSearch(query), null, secret);
+  const candidates = await findPlaces(() => textSearch(gate, query), null, secret);
   return { candidates, visited: parsed?.visited ?? null, source_input: text };
 }
 
 // Nearby Search at 50 m, then once more at 150 m, nearest first, up to 3 (SPEC §11.2 step 4).
-export async function resolveNearby(point: LatLng): Promise<NearbyResult> {
+export async function resolveNearby(point: LatLng, gate: CallGate): Promise<NearbyResult> {
   const secret = signingSecret();
-  return { candidates: await findPlaces(() => nearbySearchWithRetry(point), null, secret) };
+  return { candidates: await findPlaces(() => nearbySearchWithRetry(gate, point), null, secret) };
 }
 
 async function findPlaces(search: () => Promise<Candidate[]>, name: string | null, secret: string) {
@@ -120,6 +126,7 @@ async function findPlaces(search: () => Promise<Candidate[]>, name: string | nul
   try {
     candidates = await search();
   } catch (error) {
+    if (error instanceof RateLimitError) throw new ResolveError("rate_limited", name);
     if (!(error instanceof PlacesError)) throw error;
     throw new ResolveError(error.status === 429 ? "rate_limited" : "upstream_error", name);
   }
