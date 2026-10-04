@@ -632,6 +632,7 @@ The sheet's "VT223" is a typo for VT323. Line height ~1.2 for VT323, ~1.5 for Pr
 4. Pixel fonts and sprites only at whole-number sizes (fonts per §16.4; sprites at 1×, 2×, 3×, 4×).
 5. Only light CSS animations (e.g. `steps()` sprite-style motion). No heavy animation libraries. Respect `prefers-reduced-motion`.
 6. Visible keyboard focus state in pixel style (e.g. accent outline).
+7. Adjacent buttons use the shared button-group gap (`gap-button-group`, 28px, in rows and between wrapped or stacked rows), so their pixel borders and shadows never touch.
 
 ### 16.6 Component mapping
 | Sheet element | Build with |

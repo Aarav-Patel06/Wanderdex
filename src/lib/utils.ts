@@ -9,6 +9,9 @@ export const cn = createCn({
       "font-family": [{ font: ["display", "body", "heading"] }],
       shadow: [{ shadow: ["pixel"] }],
       "drop-shadow": [{ "drop-shadow": ["pixel"] }],
+      gap: [{ gap: ["button-group"] }],
+      "gap-x": [{ "gap-x": ["button-group"] }],
+      "gap-y": [{ "gap-y": ["button-group"] }],
     },
   },
 })

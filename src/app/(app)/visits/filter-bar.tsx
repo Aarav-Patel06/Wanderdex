@@ -290,7 +290,7 @@ function DateRange({ from, to, onChange }: Range & { onChange: (range: Range) =>
           // Tapping the chosen day again clears it, like the Clear button.
           onSelect={(date) => pick(date ? dateToDay(date) : null)}
         />
-        <div className="flex justify-between gap-4 px-1.5">
+        <div className="flex justify-between gap-button-group px-1.5">
           <Button
             type="button"
             variant="secondary"

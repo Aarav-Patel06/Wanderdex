@@ -224,19 +224,19 @@ export function ConfirmCard({
         </>
       )}
 
-      {/* Side by side where both fit (wraps at 375px). gap-x-3: each button's pixel border
-          reaches 6px outside it; gap-y-7 leaves a clear 12px below Save's shadow when wrapped.
+      {/* Side by side, the shared button-group gap apart; they wrap at 375px. px-3: with px-4
+          they'd wrap on a 390px phone too, and the card would no longer fit it (SPEC §14.2).
           mt: with the gap, 20px; the note's and the buttons' pixel borders take 6px each. */}
-      <div className="mt-2 flex flex-wrap gap-x-3 gap-y-7 px-1.5">
+      <div className="mt-2 flex flex-wrap gap-button-group px-1.5">
         {/* An exact time that was cleared can't be saved, nor a pin without a name. */}
         <Button
           type="submit"
           disabled={saving || !isComplete(when) || (!candidates && !name.trim())}
-          className="flex-1"
+          className="flex-1 px-3"
         >
           Save visit
         </Button>
-        <Button type="button" variant="secondary" disabled={saving} onClick={onCancel} className="flex-1">
+        <Button type="button" variant="secondary" disabled={saving} onClick={onCancel} className="flex-1 px-3">
           Cancel
         </Button>
       </div>

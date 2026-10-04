@@ -124,11 +124,26 @@ export function PlaceDetail({
 
       <PlaceHeader place={place} />
 
-      <Button type="button" onClick={startAdding} className="mx-1.5 self-start">
-        Add another visit
-      </Button>
+      {/* The header's buttons, stacked the shared button-group gap apart. px: their pixel
+          borders sit 6px outside them. */}
+      <div className="flex flex-col items-start gap-button-group px-1.5">
+        {/* px-2 on phones: the label alone is 304px of Press Start 2P, which just fits at 375px;
+            the icon joins it from sm up. */}
+        <Button asChild variant="secondary" className="gap-2 px-2 sm:px-4">
+          <a href={place.mapsUrl} target="_blank" rel="noopener noreferrer">
+            Open in Google Maps
+            <span className="sr-only"> (opens in a new tab)</span>
+            <ExternalLink aria-hidden="true" className="hidden size-6 shrink-0 sm:block" />
+          </a>
+        </Button>
+        <Button type="button" onClick={startAdding}>
+          Add another visit
+        </Button>
+      </div>
 
-      <div className="flex flex-col gap-4">
+      {/* mt: the last button's border and shadow reach 10px below it, so the heading sits as
+          far from them as the page's other sections (24px) sit from each other. */}
+      <div className="mt-2.5 flex flex-col gap-4">
         <h2>Your visits</h2>
         <Card font="normal">
           <ul className="divide-y-4 divide-text">
@@ -145,7 +160,7 @@ export function PlaceDetail({
                 </div>
                 {visit.note && <p className="break-words whitespace-pre-wrap">{visit.note}</p>}
                 {/* my: the buttons' pixel borders sit 6px outside them. */}
-                <div className="my-1.5 flex flex-wrap gap-x-3 gap-y-7 px-1.5">
+                <div className="my-1.5 flex flex-wrap gap-button-group px-1.5">
                   <Button
                     type="button"
                     variant="secondary"
@@ -205,7 +220,8 @@ export function PlaceDetail({
   );
 }
 
-// Sprite, name, address, city/country, the user's category (editable), and Open in Google Maps.
+// Sprite, name, address, city/country, and the user's category (editable). Open in Google Maps
+// follows it, in PlaceDetail's button group.
 function PlaceHeader({ place }: { place: PlaceInfo }) {
   const router = useRouter();
   const categoryId = useId();
@@ -261,16 +277,6 @@ function PlaceHeader({ place }: { place: PlaceInfo }) {
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
-
-      {/* px-2 on phones: the label alone is 304px of Press Start 2P, which just fits at 375px;
-          the icon joins it from sm up. */}
-      <Button asChild variant="secondary" className="mx-1.5 gap-2 self-start px-2 sm:px-4">
-        <a href={place.mapsUrl} target="_blank" rel="noopener noreferrer">
-          Open in Google Maps
-          <span className="sr-only"> (opens in a new tab)</span>
-          <ExternalLink aria-hidden="true" className="hidden size-6 shrink-0 sm:block" />
-        </a>
-      </Button>
     </header>
   );
 }

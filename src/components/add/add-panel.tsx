@@ -88,7 +88,7 @@ export function AddPanel({
         !mode && (
           // The first mode takes focus as the bubble opens (and on the way back), so the cursor
           // starts on it, as in the RPG dialog.
-          <ul role="group" aria-label="How to add" className="mode-list flex flex-col gap-6 py-1.5 pr-1.5">
+          <ul role="group" aria-label="How to add" className="mode-list flex flex-col gap-button-group py-1.5 pr-1.5">
             {MODES.map(({ mode: option, label, Icon }, index) => (
               <li key={option} className="mode-row flex items-center gap-3">
                 <span aria-hidden="true" className="mode-cursor w-4 shrink-0 font-display text-button">
@@ -109,7 +109,7 @@ export function AddPanel({
           </ul>
         )
       ) : (
-        <div role="group" aria-label="How to add" className="grid grid-cols-3 gap-4 px-1.5">
+        <div role="group" aria-label="How to add" className="grid grid-cols-3 gap-button-group px-1.5">
           {MODES.map(({ mode: option, label, Icon }) => (
             <ModeButton key={option} pressed={mode === option} disabled={loading} onClick={() => onMode(option)}>
               <Icon aria-hidden="true" className="size-6 shrink-0" />

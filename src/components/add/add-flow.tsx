@@ -458,8 +458,7 @@ function PinBanner({
           <p aria-live="polite">
             {placed ? `Pin dropped. ${verb} again to move it.` : `${verb} the map to drop a pin.`}
           </p>
-          {/* gap-x-3: each button's pixel border reaches 6px outside it. */}
-          <div className="flex flex-wrap gap-x-3 gap-y-7 px-1.5">
+          <div className="flex flex-wrap gap-button-group px-1.5">
             <Button type="button" disabled={!placed || busy} onClick={onConfirm} className="flex-1">
               Confirm
             </Button>

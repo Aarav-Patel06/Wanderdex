@@ -69,6 +69,11 @@
   /* Same shadow as a filter, so it follows 8bitcn's notched pixel borders */
   --drop-shadow-pixel: 4px 4px 0 var(--text);
 
+  /* The gap between adjacent buttons, in a row and between rows (`gap-button-group`). An 8bit
+     button's pixel border reaches 6px outside it on every side, and its shadow 4px more to the
+     right and below, so 16px is taken up and 12px stays clear between buttons. */
+  --spacing-button-group: 28px;
+
   /* Square corners everywhere */
   --radius-xs: var(--radius);
   --radius-sm: var(--radius);
