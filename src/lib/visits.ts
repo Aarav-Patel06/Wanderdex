@@ -28,47 +28,63 @@ const visitChoices = {
   note: noteSchema,
 };
 
-// POST /api/visits (SPEC §11.6) takes one of two shapes, the user's choices plus their category
-// (pre-filled, editable) either way:
-// - `place`: the candidate picked on the confirmation card, exactly as /api/resolve/* signed it;
-//   the route checks the signature before using any of it, so its strings aren't trimmed here
-//   (that would break the signature). Saved as the lookup's source, with its input.
-// - `place_id`: a place that already exists (place detail's "Add another visit", and later the
-//   manual places of §11.4). Nothing about the place is written, so there's nothing to sign: the
-//   route only checks that the user can read it under RLS (Google places, or their own manual
-//   ones, SPEC §9). Saved with source "manual" and no source input.
+// The candidate picked on the confirmation card, exactly as /api/resolve/* signed it; the route
+// checks the signature before using any of it, so its strings aren't trimmed here (that would
+// break the signature).
+const signedPlaceSchema = z.object({
+  google_place_id: z.string().min(1).max(300),
+  name: z.string().min(1).max(300),
+  google_primary_type: z.string().max(100).nullable(),
+  types: z.array(z.string().max(100)).max(100),
+  category: z.enum(CATEGORIES),
+  address: z.string().max(500).nullable(),
+  city: z.string().max(200).nullable(),
+  country: z.string().max(200).nullable(),
+  country_code: z
+    .string()
+    .regex(/^[A-Z]{2}$/)
+    .nullable(),
+  lat: z.number().min(-90).max(90),
+  lng: z.number().min(-180).max(180),
+  timezone: z.string().min(1).max(100),
+  expires: z.number().int(),
+  signature: z.string().regex(/^[0-9a-f]{64}$/),
+});
+
+// A dropped pin (SPEC §11.4): the user's name for the place and the pin's coordinates. The server
+// works out everything else (city, country, zone) from the coordinates.
+export const MANUAL_NAME_MAX = 100;
+export const manualPlaceSchema = z.object({
+  name: z.string().trim().min(1).max(MANUAL_NAME_MAX),
+  lat: z.number().min(-90).max(90),
+  lng: z.number().min(-180).max(180),
+});
+
+export type ManualPlace = z.infer<typeof manualPlaceSchema>;
+
+// POST /api/visits (SPEC §11.6) takes one of these shapes, the user's choices plus their category
+// (pre-filled, editable) every time:
+// - `place` from a link or typed text: saved as that source, with its input.
+// - `place` from a photo (SPEC §11.2): source "photo" and no source input (never photo data, §8).
+// - `place_id`: a place that already exists (place detail's "Add another visit", and return
+//   visits to a manual place). Nothing about the place is written, so there's nothing to sign:
+//   the route only checks that the user can read it under RLS (Google places, or their own
+//   manual ones, SPEC §9). Saved with source "manual" and no source input.
+// - `manual_place`: a new place from a dropped pin, private to the user (SPEC §9). Unsigned, since
+//   it can only ever affect that user. Source "manual", no source input.
 // The user's choices only affect their own visit row.
+const visitBase = { category: z.enum(CATEGORIES), ...visitChoices };
+
 export const newVisitSchema = z.union([
   z.object({
-    place: z.object({
-      google_place_id: z.string().min(1).max(300),
-      name: z.string().min(1).max(300),
-      google_primary_type: z.string().max(100).nullable(),
-      types: z.array(z.string().max(100)).max(100),
-      category: z.enum(CATEGORIES),
-      address: z.string().max(500).nullable(),
-      city: z.string().max(200).nullable(),
-      country: z.string().max(200).nullable(),
-      country_code: z
-        .string()
-        .regex(/^[A-Z]{2}$/)
-        .nullable(),
-      lat: z.number().min(-90).max(90),
-      lng: z.number().min(-180).max(180),
-      timezone: z.string().min(1).max(100),
-      expires: z.number().int(),
-      signature: z.string().regex(/^[0-9a-f]{64}$/),
-    }),
-    category: z.enum(CATEGORIES),
-    ...visitChoices,
+    place: signedPlaceSchema,
+    ...visitBase,
     source: z.enum(["link", "text"]),
     source_input: z.string().trim().min(1).max(2048),
   }),
-  z.object({
-    place_id: z.uuid(),
-    category: z.enum(CATEGORIES),
-    ...visitChoices,
-  }),
+  z.object({ place: signedPlaceSchema, ...visitBase, source: z.literal("photo"), source_input: z.null() }),
+  z.object({ place_id: z.uuid(), ...visitBase }),
+  z.object({ manual_place: manualPlaceSchema, ...visitBase }),
 ]);
 
 export type NewVisit = z.infer<typeof newVisitSchema>;

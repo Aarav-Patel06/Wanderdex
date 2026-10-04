@@ -84,22 +84,6 @@ export function localValue(visitedAt: Date | string, precision: Precision, timeZ
   return formatInTimeZone(visitedAt, timeZone, LOCAL_FORMAT[precision]);
 }
 
-// EXIF DateTimeOriginal ("YYYY:MM:DD HH:MM:SS") → UTC (SPEC §11.2 step 5). Uses
-// OffsetTimeOriginal ("+02:00") when present, otherwise the place's zone. Pass the raw
-// EXIF strings: exifr's default Date conversion would use the browser's zone.
-// Returns null for a missing or invalid date (cameras write "0000:00:00 00:00:00").
-export function exifToUtc(dateTimeOriginal: string, offset: string | null | undefined, placeTimeZone: string) {
-  const m = dateTimeOriginal.trim().match(/^(\d{4}):(\d{2}):(\d{2}) (\d{2}):(\d{2}):(\d{2})$/);
-  if (!m) return null;
-  const [, year, month, day, hour, minute, second] = m;
-  if (!isLocalValue(`${year}-${month}-${day}T${hour}:${minute}`, "datetime") || Number(second) > 59) return null;
-
-  const local = `${year}-${month}-${day}T${hour}:${minute}:${second}`;
-  const trimmedOffset = offset?.trim();
-  if (trimmedOffset && /^[+-]\d{2}:\d{2}$/.test(trimmedOffset)) return new Date(`${local}${trimmedOffset}`);
-  return localToUtc(local, placeTimeZone);
-}
-
 // "Mar 2025", "Mar 12, 2025", or "Mar 12, 2025, 3:45 PM", in the place's zone.
 export function formatVisited(visitedAt: Date | string, precision: Precision, timeZone: string) {
   return formatInTimeZone(visitedAt, timeZone, DISPLAY[precision]);

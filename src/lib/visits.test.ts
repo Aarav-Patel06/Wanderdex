@@ -134,6 +134,89 @@ describe("newVisitSchema", () => {
       expect(newVisitSchema.safeParse(neither).success).toBe(false);
     });
   });
+
+  describe("from a photo", () => {
+    const photo = { ...visit, visited: { value: "2025-03-12T15:45", precision: "datetime" }, source: "photo", source_input: null };
+
+    it("takes a signed place with source photo and no source input", () => {
+      const parsed = newVisitSchema.parse(photo);
+      expect(parsed).toMatchObject({ source: "photo", source_input: null });
+    });
+
+    it("never takes a source input, so no photo data can be stored with it", () => {
+      expect(newVisitSchema.safeParse({ ...photo, source_input: "data:image/jpeg;base64,/9j/4AAQ" }).success).toBe(false);
+      expect(newVisitSchema.safeParse({ ...photo, source_input: "" }).success).toBe(false);
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { source_input, ...withoutInput } = photo;
+      expect(newVisitSchema.safeParse(withoutInput).success).toBe(false);
+    });
+
+    it("still needs the signed place", () => {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { signature, ...unsigned } = photo.place;
+      expect(newVisitSchema.safeParse({ ...photo, place: unsigned }).success).toBe(false);
+    });
+  });
+
+  describe("a dropped pin (manual place)", () => {
+    const manual = {
+      manual_place: { name: "  Grandma's house ", lat: 45.4642, lng: 9.19 },
+      category: "other",
+      visited: { value: "2025-08-15", precision: "date" },
+      rating: 10,
+      note: "",
+    };
+
+    it("takes a trimmed name and the pin's coordinates, and nothing else about the place", () => {
+      const parsed = newVisitSchema.parse(manual);
+      expect(parsed).toEqual({
+        ...manual,
+        manual_place: { name: "Grandma's house", lat: 45.4642, lng: 9.19 },
+        note: null,
+      });
+    });
+
+    it("drops place fields the browser makes up (the server works them out)", () => {
+      const parsed = newVisitSchema.parse({
+        ...manual,
+        manual_place: { ...manual.manual_place, city: "Paris", country_code: "FR", created_by: PLACE_ID },
+      });
+      expect("manual_place" in parsed && parsed.manual_place).toEqual({ name: "Grandma's house", lat: 45.4642, lng: 9.19 });
+    });
+
+    it("requires a name of 1 to 100 characters after trimming", () => {
+      const named = (name: unknown) => newVisitSchema.safeParse({ ...manual, manual_place: { ...manual.manual_place, name } });
+      expect(named("a".repeat(100)).success).toBe(true);
+      expect(named(` ${"a".repeat(100)} `).success).toBe(true);
+      expect(named("a".repeat(101)).success).toBe(false);
+      expect(named("").success).toBe(false);
+      expect(named("   ").success).toBe(false);
+      expect(named(null).success).toBe(false);
+      expect(named(42).success).toBe(false);
+    });
+
+    it("requires coordinates in range", () => {
+      const at = (lat: unknown, lng: unknown) =>
+        newVisitSchema.safeParse({ ...manual, manual_place: { name: "Spot", lat, lng } }).success;
+      expect(at(90, 180)).toBe(true);
+      expect(at(-90, -180)).toBe(true);
+      expect(at(90.1, 0)).toBe(false);
+      expect(at(0, -180.1)).toBe(false);
+      expect(at("45", "9")).toBe(false);
+      expect(at(null, 9)).toBe(false);
+      expect(at(Number.POSITIVE_INFINITY, 9)).toBe(false);
+    });
+
+    it("validates the category and the choices like any visit", () => {
+      expect(newVisitSchema.safeParse({ ...manual, category: "spa" }).success).toBe(false);
+      expect(newVisitSchema.safeParse({ ...manual, rating: 0 }).success).toBe(false);
+      expect(newVisitSchema.safeParse({ ...manual, note: "a".repeat(2001) }).success).toBe(false);
+      expect(newVisitSchema.safeParse({ ...manual, visited: { value: "2025-13", precision: "month" } }).success).toBe(false);
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { category, ...noCategory } = manual;
+      expect(newVisitSchema.safeParse(noCategory).success).toBe(false);
+    });
+  });
 });
 
 describe("visitEditSchema", () => {

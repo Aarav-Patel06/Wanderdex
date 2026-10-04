@@ -10,6 +10,7 @@ import {
   LngLatBounds,
   type LngLatBoundsLike,
   Map as MapLibreMap,
+  type MapMouseEvent,
   Marker,
   type Offset,
   type PaddingOptions,
@@ -22,6 +23,7 @@ import { Plus } from "pixelarticons/react/Plus";
 import Supercluster from "supercluster";
 
 import { Loading } from "@/components/loading";
+import type { Drop } from "@/components/map/overworld";
 import { Button } from "@/components/ui/8bit/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/8bit/card";
 import { CATEGORIES, type Category, CATEGORY_LABELS, categorySprite } from "@/lib/categories";
@@ -70,6 +72,9 @@ const WORLD_BOUNDS: LngLatBoundsLike = [
 const CLUSTER_RADIUS_PX = 40;
 // Pans to a new pin at least this close, so it shows as a pin rather than inside a cluster.
 const FOCUS_ZOOM = 12;
+// Placing a pin from a photo's coordinates starts at street level, close enough to move it to
+// the right building.
+const DROP_ZOOM = 16;
 
 // The popup card's pixel tail (map.css) reaches 18px past the card; 8px more leaves room for
 // its 4px shadow plus a gap before the pin. At a corner anchor, the card shifts so the pin is
@@ -145,15 +150,17 @@ type PinProps = { id: string; name: string; category: Category };
 const pinKey = (id: string | null) => `p:${id}`;
 
 // `focus` is the pin to pan to; a new object each time a visit is saved. `coverTick` changes
-// when a panel over the map changes (useMapCover).
+// when a panel over the map changes (useMapCover). `drop` is the dropped pin (SPEC §11.4).
 export function MapView({
   places,
   focus,
   coverTick,
+  drop,
 }: {
   places: MapPlace[];
   focus: NewPin | null;
   coverTick: number;
+  drop: Drop | null;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [map, setMap] = useState<MapLibreMap | null>(null);
@@ -180,6 +187,10 @@ export function MapView({
     );
     return index;
   }, [places]);
+
+  // While a pin is being placed, a tap places it, so no place popup stays open.
+  const onPick = drop?.onPick ?? null;
+  if (onPick && selectedId) setSelectedId(null);
 
   const selected = places.find((place) => place.id === selectedId) ?? null;
   const visitedCountries = useMemo(() => countryCodes(places), [places]);
@@ -402,8 +413,38 @@ export function MapView({
     };
   }, [map, focus]);
 
+  // Drop a pin (SPEC §11.4). The pixel pin, anchored at its tip; it takes no taps, so a tap on it
+  // moves it like a tap anywhere else.
+  const dropAt = drop?.at ?? null;
+  useEffect(() => {
+    if (!map || !dropAt) return;
+    const marker = new Marker({ element: dropPinElement(), anchor: "bottom" }).setLngLat([dropAt.lng, dropAt.lat]).addTo(map);
+    return () => {
+      marker.remove();
+    };
+  }, [map, dropAt]);
+
+  // A tap (or click) on the map places the pin, and the next one moves it. MapLibre doesn't
+  // report a drag or a pinch as a click.
+  useEffect(() => {
+    if (!map || !onPick) return;
+    const onClick = (event: MapMouseEvent) => onPick({ lat: event.lngLat.lat, lng: event.lngLat.wrap().lng });
+    map.on("click", onClick);
+    return () => {
+      map.off("click", onClick);
+    };
+  }, [map, onPick]);
+
+  // Starting from a photo's coordinates: fly there, close enough to adjust the pin.
+  const dropStart = drop?.start ?? null;
+  useEffect(() => {
+    if (!map || !dropStart) return;
+    map.flyTo({ center: [dropStart.lng, dropStart.lat], zoom: Math.max(map.getZoom(), DROP_ZOOM) });
+  }, [map, dropStart]);
+
   return (
-    <div className="absolute inset-0">
+    // data-placing: map.css turns the place pins' taps off and shows a crosshair.
+    <div className="absolute inset-0" data-placing={onPick ? "" : undefined}>
       {/* data-pixelated is set on it by the mode switch; the pin sizes are for map.css. */}
       <div
         ref={containerRef}
@@ -496,6 +537,50 @@ function pinButton(label: string, sprite: string, badge: string | null, onClick:
 
   button.append(frame);
   return button;
+}
+
+// The dropped pin: a round-headed map pin, unlike the category shields, drawn on a 12×16 pixel
+// grid at 4× (48×64px, SPEC §16.5 rule 4) in palette colors: X outline (text), P fill (primary),
+// C highlight (background).
+const DROP_PIN = [
+  "...XXXXXX...",
+  "..XPPPPPPX..",
+  ".XPPPPPPPPX.",
+  "XPPPPCCPPPPX",
+  "XPPPCCCCPPPX",
+  "XPPPCCCCPPPX",
+  "XPPPPCCPPPPX",
+  "XPPPPPPPPPPX",
+  ".XPPPPPPPPX.",
+  ".XPPPPPPPPX.",
+  "..XPPPPPPX..",
+  "...XPPPPX...",
+  "...XPPPPX...",
+  "....XPPX....",
+  "....XPPX....",
+  ".....XX.....",
+];
+const DROP_PIN_COLORS = { X: "--text", P: "--primary", C: "--background" } as const;
+
+// One <path> per color, a 1-pixel-tall rectangle per run of that color in a row.
+const DROP_PIN_SVG = (() => {
+  const paths = Object.entries(DROP_PIN_COLORS).map(([key, token]) => {
+    let d = "";
+    DROP_PIN.forEach((row, y) => {
+      for (const match of row.matchAll(new RegExp(`${key}+`, "g"))) d += `M${match.index} ${y}h${match[0].length}v1h-${match[0].length}z`;
+    });
+    return `<path d="${d}" style="fill:var(${token})"/>`;
+  });
+  const width = DROP_PIN[0].length;
+  const height = DROP_PIN.length;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width * 4}" height="${height * 4}" shape-rendering="crispEdges" aria-hidden="true">${paths.join("")}</svg>`;
+})();
+
+function dropPinElement() {
+  const element = document.createElement("div");
+  element.className = "drop-pin";
+  element.innerHTML = DROP_PIN_SVG;
+  return element;
 }
 
 function markSelected(markers: Map<string, Marker>, selectedId: string | null) {

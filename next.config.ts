@@ -15,6 +15,11 @@ function lanAddresses() {
 
 // Only `next dev` gets the LAN origins; builds and production servers never look them up.
 export default function nextConfig(phase: string): NextConfig {
-  if (phase === PHASE_DEVELOPMENT_SERVER) return { allowedDevOrigins: lanAddresses() };
-  return {};
+  const config: NextConfig = {
+    // /api/visits reads the country shapes from disk for dropped pins (src/lib/countries.ts).
+    // Files in public/ are served statically and aren't part of a function unless listed here.
+    outputFileTracingIncludes: { "/api/visits": ["./public/geo/countries.geojson"] },
+  };
+  if (phase === PHASE_DEVELOPMENT_SERVER) return { ...config, allowedDevOrigins: lanAddresses() };
+  return config;
 }

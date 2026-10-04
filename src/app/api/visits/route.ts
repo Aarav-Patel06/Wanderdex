@@ -1,5 +1,7 @@
 import { errorResponse, readBody, session } from "@/lib/api";
+import type { Category } from "@/lib/categories";
 import { timezoneAt, visitedAtUtc } from "@/lib/dates";
+import { placeArea } from "@/lib/manual-place";
 import { type PlaceFields, signingSecret, verifyPlace } from "@/lib/place-signature";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
@@ -7,6 +9,7 @@ import {
   findReadablePlace,
   isFirstInCountry,
   isReturnVisit,
+  type ManualPlace,
   newVisitSchema,
   PLACE_COLUMNS,
   type SavedVisit,
@@ -14,8 +17,9 @@ import {
 } from "@/lib/visits";
 
 // Saves a visit (SPEC §11.6 steps 1–5), from the confirmation card after a lookup (a signed
-// candidate) or for a place that already exists (by id), and says whether it's a return visit
-// and whether it's the user's first in its country, for the client's toasts.
+// candidate), for a place that already exists (by id), or at a dropped pin (a new manual place,
+// SPEC §11.4), and says whether it's a return visit and whether it's the user's first in its
+// country, for the client's toasts.
 export async function POST(request: Request) {
   const { supabase, userId } = await session();
   if (!userId) return errorResponse("unauthorized");
@@ -25,8 +29,11 @@ export async function POST(request: Request) {
 
   try {
     let place: SavedVisit["place"];
-    let source: { source: "link" | "text" | "manual"; source_input: string | null };
-    if ("place_id" in body) {
+    let source: { source: "link" | "text" | "photo" | "manual"; source_input: string | null };
+    if ("manual_place" in body) {
+      place = await createManualPlace(body.manual_place, body.category, userId);
+      source = { source: "manual", source_input: null };
+    } else if ("place_id" in body) {
       // Nothing about the place is written, so no signature: it only has to exist and be
       // readable by this user under RLS (Google places, or their own manual ones, SPEC §9).
       const found = await findReadablePlace(supabase, body.place_id);
@@ -82,6 +89,36 @@ function settledFlag(result: PromiseSettledResult<boolean>, check: string) {
   if (result.status === "fulfilled") return result.value;
   console.error(`${check} check failed:`, result.reason);
   return false;
+}
+
+// A dropped pin's place (SPEC §11.4), private to the user who made it (created_by, RLS §9). The
+// browser can't write places, so this uses the secret key. Its category is the one the user chose;
+// it has no Google ID, type, or address. Every save makes a new row: a return visit to it goes by
+// its id. If the visit insert then fails, the row stays, unused and visible to no one else.
+async function createManualPlace(
+  { name, lat, lng }: ManualPlace,
+  category: Category,
+  userId: string,
+): Promise<SavedVisit["place"]> {
+  const area = await placeArea({ lat, lng });
+  const { data, error } = await createAdminClient()
+    .from("places")
+    .insert({
+      google_place_id: null,
+      name,
+      category,
+      google_primary_type: null,
+      address: null,
+      ...area,
+      lat,
+      lng,
+      timezone: timezoneAt(lat, lng),
+      created_by: userId,
+    })
+    .select(PLACE_COLUMNS)
+    .single<SavedVisit["place"]>();
+  if (error) throw error;
+  return data;
 }
 
 // places is shared and the browser can't write it, so this uses the secret key. A new Google

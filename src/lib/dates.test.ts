@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  exifToUtc,
   formatVisited,
   formatVisitedParts,
   isLocalValue,
@@ -94,30 +93,6 @@ describe("visitedAtUtc (storage rules)", () => {
     expect(() => visitedAtUtc("2025-03-12", "month", "UTC")).toThrow(RangeError);
     expect(() => visitedAtUtc("2025-02-30", "date", "UTC")).toThrow(RangeError);
   });
-});
-
-describe("exifToUtc", () => {
-  it("uses OffsetTimeOriginal when present, not the place's zone", () => {
-    expect(iso(exifToUtc("2025:03:12 15:45:30", "+02:00", "America/New_York"))).toBe("2025-03-12T13:45:30.000Z");
-    expect(iso(exifToUtc("2025:03:12 15:45:30", "-07:00", "Europe/Paris"))).toBe("2025-03-12T22:45:30.000Z");
-    expect(iso(exifToUtc("2025:03:12 15:45:30", "+05:45", "UTC"))).toBe("2025-03-12T10:00:30.000Z");
-  });
-
-  it("uses the place's zone when there's no offset", () => {
-    expect(iso(exifToUtc("2025:03:12 15:45:30", null, "Europe/Paris"))).toBe("2025-03-12T14:45:30.000Z");
-    expect(iso(exifToUtc("2025:07:01 12:00:00", undefined, "Europe/Paris"))).toBe("2025-07-01T10:00:00.000Z");
-  });
-
-  it("ignores a malformed offset", () => {
-    expect(iso(exifToUtc("2025:03:12 15:45:30", "garbage", "Europe/Paris"))).toBe("2025-03-12T14:45:30.000Z");
-  });
-
-  it.each(["0000:00:00 00:00:00", "2025:02:30 10:00:00", "2025-03-12 15:45:30", "2025:03:12 15:45:61", ""])(
-    "returns null for %j",
-    (value) => {
-      expect(exifToUtc(value, "+02:00", "UTC")).toBeNull();
-    },
-  );
 });
 
 describe("formatVisited", () => {

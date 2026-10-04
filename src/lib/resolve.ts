@@ -1,13 +1,16 @@
+import { z } from "zod";
+
 import { type ParsedText, parseText } from "@/lib/ai/parse";
 import { timezoneAt, todayIn } from "@/lib/dates";
 import { type Candidate, nearbySearchWithRetry, PlacesError, textSearch } from "@/lib/google/places";
 import { isApplePlacePage, readApplePlace } from "@/lib/links/apple";
 import { ExpandError, expandLink } from "@/lib/links/expand";
-import { parseMapsLink } from "@/lib/links/parse";
+import { type LatLng, parseMapsLink } from "@/lib/links/parse";
 import { readMapsLink } from "@/lib/links/validate";
 import { type SignedPlace, signingSecret, signPlace } from "@/lib/place-signature";
 
-// The lookup pipeline behind /api/resolve/link and /api/resolve/text (SPEC §11.1, §11.3).
+// The lookup pipeline behind /api/resolve/link, /api/resolve/text, and /api/resolve/nearby
+// (SPEC §11.1, §11.3, §11.2).
 
 // Stable error codes; the UI maps each one to its §11.7 copy.
 export const ERROR_STATUS = {
@@ -51,6 +54,17 @@ export type ResolveResult = {
 
 export type LinkResult = ResolveResult & { name: string | null };
 
+// POST /api/resolve/nearby (Upload Photo, SPEC §11.2 step 4): a photo's GPS coordinates and
+// nothing else. Strict, so nothing else from the photo can ride along.
+export const nearbyBodySchema = z.strictObject({
+  lat: z.number().min(-90).max(90),
+  lng: z.number().min(-180).max(180),
+});
+
+// No date and no source input: the photo's date is read in the browser and goes only on the
+// saved visit, and a photo visit has no source input (SPEC §8).
+export type NearbyResult = { candidates: ResolvedCandidate[] };
+
 export async function resolveLink(input: string): Promise<LinkResult> {
   // Before any upstream call: without the secret there are no signed results to return.
   const secret = signingSecret();
@@ -93,6 +107,12 @@ export async function resolveText(text: string, timeZone: string, now = new Date
   const query = parsed ? [parsed.query, parsed.location_hint].filter(Boolean).join(" ") : text;
   const candidates = await findPlaces(() => textSearch(query), null, secret);
   return { candidates, visited: parsed?.visited ?? null, source_input: text };
+}
+
+// Nearby Search at 50 m, then once more at 150 m, nearest first, up to 3 (SPEC §11.2 step 4).
+export async function resolveNearby(point: LatLng): Promise<NearbyResult> {
+  const secret = signingSecret();
+  return { candidates: await findPlaces(() => nearbySearchWithRetry(point), null, secret) };
 }
 
 async function findPlaces(search: () => Promise<Candidate[]>, name: string | null, secret: string) {

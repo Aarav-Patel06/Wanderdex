@@ -6,6 +6,7 @@ import dynamic from "next/dynamic";
 
 import { useAddVisit, useAddVisitBubble } from "@/components/add/add-visit-context";
 import { Loading } from "@/components/loading";
+import type { LatLng } from "@/lib/links/parse";
 import { addVisit, type MapPlace, type NewPin } from "@/lib/map/places";
 
 // MapLibre needs the browser (WebGL, window), so the map never renders on the server. While
@@ -20,11 +21,22 @@ const MapView = dynamic(() => import("@/components/map/map-view").then((mod) => 
   ),
 });
 
+// Drop a pin (SPEC §11.4): the pin shown on the map (if placed yet), where the map should fly as
+// placing starts (a photo's coordinates), and, while the user is placing it, what a tap on the
+// map does. While onPick is set, a tap places or moves the pin instead of opening a place.
+export type Drop = {
+  at: LatLng | null;
+  start: LatLng | null;
+  onPick: ((at: LatLng) => void) | null;
+};
+
 type OverworldApi = {
   // Puts a just-saved visit's pin on the map and pans to it (SPEC §11.6 step 7).
   addPin: (pin: NewPin) => void;
   // A floating panel over the map (data-map-cover) appeared, resized, or went away.
   coversChanged: () => void;
+  // The dropped pin, or null for none.
+  setDrop: (drop: Drop | null) => void;
 };
 
 const OverworldContext = createContext<OverworldApi | null>(null);
@@ -66,6 +78,7 @@ export function Overworld({
   const [places, setPlaces] = useState(initialPlaces);
   const [focus, setFocus] = useState<NewPin | null>(null);
   const [coverTick, setCoverTick] = useState(0);
+  const [drop, setDrop] = useState<Drop | null>(null);
   const api = useMemo<OverworldApi>(
     () => ({
       addPin(pin) {
@@ -73,6 +86,7 @@ export function Overworld({
         setFocus({ ...pin });
       },
       coversChanged: () => setCoverTick((tick) => tick + 1),
+      setDrop,
     }),
     [],
   );
@@ -82,7 +96,7 @@ export function Overworld({
       {/* isolate: the map's markers and popups stack below the shell's avatar menu.
           .overworld: map.css moves the map controls clear of the confirmation panel. */}
       <div className="overworld relative isolate h-full bg-map-ocean">
-        <MapView places={places} focus={focus} coverTick={coverTick} />
+        <MapView places={places} focus={focus} coverTick={coverTick} drop={drop} />
         {places.length === 0 && <EmptyHint />}
         {children}
       </div>

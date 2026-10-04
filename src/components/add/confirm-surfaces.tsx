@@ -13,7 +13,12 @@ import "./add.css";
 // Desktop: a side panel on the right, the height minus 1rem at each end; it scrolls inside only
 // on short windows. Its width is --confirm-width (add.css). The caller positions it (absolute
 // over the map, fixed elsewhere).
-export function ConfirmPanel({ className, children, ...props }: React.ComponentProps<"section">) {
+export function ConfirmPanel({
+  title = "Confirm visit",
+  className,
+  children,
+  ...props
+}: React.ComponentProps<"section"> & { title?: string }) {
   const titleId = useId();
   return (
     <section
@@ -23,7 +28,7 @@ export function ConfirmPanel({ className, children, ...props }: React.ComponentP
     >
       <Card font="normal" className="flex max-h-full min-h-0 flex-col">
         <CardHeader>
-          <CardTitle id={titleId}>Confirm visit</CardTitle>
+          <CardTitle id={titleId}>{title}</CardTitle>
         </CardHeader>
         {/* pb: the last button's pixel border and shadow reach 10px below it, which would
             otherwise make the content scroll. */}

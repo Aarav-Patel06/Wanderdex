@@ -122,3 +122,21 @@
     border-right: 4px solid var(--text);
   }
 }
+
+/* Drop a pin (SPEC §11.4, map-view.tsx). While placing, a tap anywhere on the map places the pin,
+   so the place pins let taps through, and the cursor is a crosshair (over MapLibre's grab hand,
+   while dragging too). The dropped pin itself never takes a tap. It sits above the place pins
+   and below the map controls (z-10). */
+[data-placing] .pin {
+  pointer-events: none;
+}
+[data-placing] .maplibregl-canvas-container.maplibregl-interactive {
+  cursor: crosshair;
+}
+.drop-pin {
+  pointer-events: none;
+  z-index: 5;
+}
+.drop-pin svg {
+  display: block;
+}

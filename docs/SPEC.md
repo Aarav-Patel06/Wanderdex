@@ -128,7 +128,7 @@ Next.js server (Vercel)
  ├─ /api/resolve/link    → expand link, parse, Google Text Search
  ├─ /api/resolve/text    → Gemini parse, Google Text Search
  ├─ /api/resolve/nearby  → Google Nearby Search (photo GPS / manual pin)
- ├─ /api/visits (save)   → upsert place (secret key) or reuse one by id, + insert visit
+ ├─ /api/visits (save)   → upsert place (secret key), reuse one by id, or create a manual place, + insert visit
  ├─ /api/visits/[id]    → edit / delete one visit (session client, RLS)
  ├─ /api/places/[id]/category → the user's category for a place (their visits only)
  └─ /api/health          → trivial DB query (keep-alive target)
@@ -282,7 +282,7 @@ create index resolve_log_user_time_idx on resolve_log (user_id, created_at desc)
 **Other notes:**
 - Rows are tiny (~1 KB per visit), so the free 500 MB database holds hundreds of thousands of visits.
 - `updated_at` is maintained by a trigger.
-- Deleting a visit never deletes the shared place row.
+- Deleting a visit never deletes its place row, a manual place (§11.4) included.
 
 ---
 
@@ -338,12 +338,13 @@ The add panel has **three separate modes** (as in the design sheet): **Paste Lin
 6. Google doesn't document its URL format, so parsing can break. **On any parse failure:** an RPG dialog says "Couldn't read that link. Try typing the place instead." with a button that switches to Type Location, carrying over any parsed name.
 
 ### 11.2 Upload Photo (browser, then `/api/resolve/nearby`)
-1. The user picks or drops one image (JPEG, PNG, HEIC, WebP).
-2. **Read metadata in the browser with exifr**: GPS latitude/longitude, `DateTimeOriginal`, `OffsetTimeOriginal`. **The image is never uploaded, stored, or sent anywhere.** Only coordinates and the date go to the server.
-3. **No GPS** → warning alert "This photo has no location data." with "Type where it was taken instead.", then switch to Type Location, **pre-filling the photo's date** if it had one.
-4. **Has GPS** → Google Nearby Search, radius 50 m, ranked by distance, max 3 results. If none, retry once at 150 m. If still none, offer the manual pin fallback, pre-placed at the photo's coordinates.
-5. **Date:** use `DateTimeOriginal` (precision `datetime`). If `OffsetTimeOriginal` exists, use it; otherwise interpret the time in the place's time zone. **No date** → default to now.
-6. Expect GPS to be missing often: phone browser photo pickers and messaging apps frequently strip location data. This is expected behavior, not a bug.
+1. The user picks one image with the device's normal image picker ("Choose photo"), or, on desktop, drops it on the panel. JPEG, PNG, HEIC, and WebP are read; any other file shows "That file isn't a photo we can read." (so does a file the reader can't parse).
+2. **Read metadata in the browser with exifr** (`src/lib/photo.ts`; exifr loads only when a photo is picked): GPS latitude/longitude, `DateTimeOriginal`, `OffsetTimeOriginal`. **The image is never uploaded, stored, or sent anywhere.** Only the coordinates go to `/api/resolve/nearby` (it accepts `{ lat, lng }` and nothing else); the date goes to the server only as the saved visit's date. GPS of exactly 0,0 counts as none.
+3. **No GPS** → warning alert "This photo has no location data." with "Type where it was taken instead.", and the panel switches to Type Location, showing the photo's date if it had one. That date pre-fills the confirmation card (exact time) unless the typed text gives a date. The visit is a Type Location visit (source `text`).
+4. **Has GPS** → `POST /api/resolve/nearby` (session check, zod, signed candidates like the other lookups): Google Nearby Search, radius 50 m, ranked by distance, max 3 results. If none, retry once at 150 m. If still none, go straight to the drop-a-pin flow (§11.4) with the pin pre-placed at the photo's coordinates.
+5. **Date:** use `DateTimeOriginal` (precision `datetime`). If `OffsetTimeOriginal` exists, use it (the instant, shown in the place's time zone); otherwise interpret the time in the place's time zone. **No date** → default to now. The card works in its first candidate's zone, as for the other modes.
+6. Visits saved from this mode have source `photo` and no `source_input`.
+7. Expect GPS to be missing often: phone browser photo pickers and messaging apps frequently strip location data. This is expected behavior, not a bug.
 
 ### 11.3 Type Location (server: `/api/resolve/text`)
 1. Send the text to Gemini with today's date and the user's current time zone (for relative dates like "last March").
@@ -353,7 +354,11 @@ The add panel has **three separate modes** (as in the design sheet): **Paste Lin
 5. **The AI only interprets text. It never supplies facts** (addresses, coordinates, whether a place exists). Facts come from Google.
 
 ### 11.4 Manual fallback (drop a pin)
-Reachable from every mode ("Can't find it? Drop a pin"). The user taps a spot on the map, types a name, and picks a category. City/country come from a Nearby Search at that point (first result's address components); if there are none, the country is derived from the Natural Earth shapes by point-in-polygon and city stays empty. Creates a `places` row with `google_place_id = null` and `created_by = user`.
+1. **Reachable** from every mode's panel ("Can't find it? Drop a pin"), from the "No places found" message (a "Drop a pin" button), and from the confirmation card after a lookup. From a photo, the pin starts at the photo's coordinates (if it had any) and the card gets the photo's date.
+2. **Placing:** the add panel gets out of the way (desktop: the bubble or card closes; phones: the drawer closes), and a "Drop a pin" card over the bottom of the map says what to do ("Click/Tap the map to drop a pin.", then "Pin dropped. Click/Tap again to move it.") with Confirm (once a pin is placed) and Cancel. A click or tap on the map places a pixel pin there; another moves it. Place pins don't open while placing. Escape, Cancel, or Add Visit gives up. Starting from a photo, the map flies to its coordinates (street zoom).
+3. **Confirm** opens the confirmation card for the new place (titled "New place"; desktop side panel, phone drawer): **Name** (required, at most 100 characters) instead of the candidates, **Category** (the 10, starting at Other), and the usual date & time with precision, rating, and note (§11.5). The date starts at the photo's date, or now, in the pin's time zone.
+4. **Saving** (`/api/visits`, a `manual_place` with the name and coordinates, zod-validated): the server works out city and country from the coordinates: a Nearby Search at the point (50 m, then 150 m), using the first result's address components with the §12.1 rules (Tokyo included). If there are none (or Google fails), the country comes from `public/geo/countries.geojson` by point-in-polygon (English name from its code) and the city stays empty. The time zone comes from the coordinates; the address stays null. It creates a `places` row with `google_place_id = null`, the chosen category, and `created_by = user` (private, §9), then the visit (source `manual`, no `source_input`). After that it's like any save (§11.6 steps 5–7): toasts, the pin, the map flying to it.
+5. A return visit to a manual place uses the place's id ("Add another visit", §14.4). A manual place whose last visit is deleted stays in the database, private and unused (§8).
 
 ### 11.5 Confirmation card
 Shown after any successful lookup:
@@ -363,12 +368,13 @@ Shown after any successful lookup:
 - **Rating:** optional 1–10 selector, 44px cells. Desktop: one row of 10. **Mobile: two rows of 5** (ten 44px tap targets don't fit across 375px). Tapping the chosen number again clears it.
 - **Note:** optional, up to 2000 characters. It starts one line tall and grows as you type; a character count shows near the limit.
 - **Phones:** Rating and Note start collapsed behind an "Add rating & note" button, which shows both in place, so the card fits (§14.2) and a plain save stays one tap. Desktop shows them from the start.
-- **Buttons:** "Save visit" (primary), "Cancel" (secondary), and a "Can't find it? Drop a pin" link.
+- **Buttons:** "Save visit" (primary), "Cancel" (secondary), and a "Can't find it? Drop a pin" link (§11.4), on the Matches row so it adds no height. Not on place detail's "Add another visit" card, or on a dropped pin's own card.
 
 ### 11.6 Saving (`/api/visits`)
 1. Re-validate input on the server (zod), and check the place's signature: every candidate from `/api/resolve/*` is signed on the server (HMAC-SHA256 with `RESOLVE_SIGNING_SECRET`) over all the place fields the save uses, with a 24-hour expiry. A missing, wrong, or expired signature saves nothing and shows "The map spirits aren't answering. Try again." Only the user's choices (category, date/time, precision, rating, note) are unsigned. Rating is a whole number 1–10 or none; the note is trimmed, at most 2000 characters, and an empty note is none. Without the secret, lookups and saves fail.
-   - **Existing place, by id:** a save may instead name a place that already exists by its `id` (place detail's "Add another visit", §14.4, and manual places, §11.4). Nothing about the place is written, so there's no signature: the server only checks that the place exists and that the user can read it under RLS (§9), using the user's session. These visits are saved with source `manual` and no `source_input`.
-2. Upsert the place by `google_place_id` with the secret key (insert if new, otherwise reuse). A save by id skips this.
+   - **Existing place, by id:** a save may instead name a place that already exists by its `id` (place detail's "Add another visit", §14.4, including return visits to manual places). Nothing about the place is written, so there's no signature: the server only checks that the place exists and that the user can read it under RLS (§9), using the user's session. These visits are saved with source `manual` and no `source_input`.
+   - **New manual place:** a dropped pin (§11.4) sends its name and coordinates, unsigned: the place is private to its creator (§9), so made-up values only affect that user.
+2. Upsert the place by `google_place_id` with the secret key (insert if new, otherwise reuse). A save by id skips this; a dropped pin inserts its new manual place (§11.4).
 3. Compute `timezone` from coordinates and `visited_at` in UTC.
 4. Insert the visit with the chosen category. Just before, if the user already has visits at this place in another category, update them to the chosen one (one category per user per place, §8); if that update fails, nothing is saved.
 5. Check whether this is the user's **first visit in this country** (no other visit of theirs with the same `country_code`, not counting the one just inserted). A place without a `country_code` never counts. The response says so with a flag. A second flag says whether it's a **return visit**: the user already had another visit at this place, from any path (including pasting a link for a place they've logged before).
@@ -521,7 +527,7 @@ Display labels: "Food", "Cafe", "Bar", "Museum", "Landmark", "Park & Nature", "S
 - **Mobile:** bottom tab bar with **Overworld**, **My Visits**, **Add Visit** (opens the drawer), with Pixelarticons icons and 8px Press Start 2P labels. Same visual language as the sidebar: dark fill down to the bottom screen edge (safe area), an `accent` pixel border along its top edge, the active tab in `accent` with the "▶" marker beside its icon, and a press animation on tap. Tabs stay at least 44px tall. Log out lives in a small menu button (user initial) in the top-right corner of the Overworld.
 
 ### 14.2 Overworld (`/`)
-- **Desktop:** the map fills the window, full-bleed behind the floating sidebar. There is no always-visible add panel. Pressing Add Visit in the sidebar opens the add panel ("Add Anything") as a speech bubble next to the sidebar, its stepped pixel tail pointing at the Add Visit item: a cream pixel card on `surface` like the pin popup (§13.4). It holds the three mode buttons as a vertical menu (Upload Photo disabled until Phase 2), with the "▶" cursor on the hovered or focused one. Choosing a mode turns the same bubble into that mode's input (e.g. the link field + Find), with a Back button to the menu. After a successful lookup the bubble closes and the confirmation card opens as a side panel over the map, on the right. The bubble closes on Escape, a click outside it, or pressing Add Visit again; closing it clears its input.
+- **Desktop:** the map fills the window, full-bleed behind the floating sidebar. There is no always-visible add panel. Pressing Add Visit in the sidebar opens the add panel ("Add Anything") as a speech bubble next to the sidebar, its stepped pixel tail pointing at the Add Visit item: a cream pixel card on `surface` like the pin popup (§13.4). It holds the three mode buttons as a vertical menu, with the "▶" cursor on the hovered or focused one. Choosing a mode turns the same bubble into that mode's input (e.g. the link field + Find), with a Back button to the menu. After a successful lookup the bubble closes and the confirmation card opens as a side panel over the map, on the right. The bubble closes on Escape, a click outside it, or pressing Add Visit again; closing it clears its input.
 - **Fit:** at 1280×800 (desktop) and 390×844 (iPhone), the add bubble, the add drawer, the confirmation card (with up to 3 candidates), and the map legend fit without scrolling inside. Smaller screens may scroll.
 - **Mobile:** full-screen map. A slide-up drawer holds the add panel (three mode buttons) and becomes the confirmation card after a lookup.
 
