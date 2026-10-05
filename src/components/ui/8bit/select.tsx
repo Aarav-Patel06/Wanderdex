@@ -82,7 +82,7 @@ function SelectTrigger({ children, ...props }: BitSelectTriggerProps) {
     >
       <ShadcnSelectTrigger
         {...props}
-        className={cn("rounded-none ring-0 w-full border-0 min-h-11 bg-background text-body", className)}
+        className={cn("rounded-none ring-0 w-full border-0 min-h-11 bg-background text-body [--focus-offset:6px]", className)}
       >
         {children}
       </ShadcnSelectTrigger>

@@ -5,6 +5,7 @@ import { createContext, use, useCallback, useMemo, useRef, useState } from "reac
 import dynamic from "next/dynamic";
 
 import { useAddVisit, useAddVisitBubble } from "@/components/add/add-visit-context";
+import { ChoiceMarker, rpgChoice, rpgChoices } from "@/components/dialogs/rpg-box";
 import { Loading } from "@/components/loading";
 import type { LatLng } from "@/lib/links/parse";
 import { addVisit, type MapPlace, type NewPin } from "@/lib/map/places";
@@ -128,7 +129,8 @@ export function Overworld({
 // tail points at Add Visit: beside the sidebar on desktop, above the tab bar (pointing down at
 // the Add Visit tab) on mobile (useAddVisitBubble; 6 = the RPG box's border is inside it).
 // "Later" hides it until the Overworld next loads, and so does pressing Add Visit. The rpg-box
-// and tail styles are in shell.css.
+// and tail styles are in shell.css; "Later" is an RpgBox choice (rpg-box.css). The box markup is
+// its own, since the shadow has to be on the bubble, around the box and its tail.
 function EmptyHint() {
   const { open } = useAddVisit();
   const [hidden, setHidden] = useState(open);
@@ -148,16 +150,12 @@ function EmptyHint() {
         <span aria-hidden="true" className="rpg-box-corner bottom-0 left-0" />
         <span aria-hidden="true" className="rpg-box-corner right-0 bottom-0" />
         <p className="font-display text-h3">Your adventure starts here. Add your first place!</p>
-        <button
-          type="button"
-          onClick={() => setHidden(true)}
-          className="flex min-h-11 items-center gap-3 self-start font-display text-button"
-        >
-          <span aria-hidden="true" className="text-accent">
-            ▶︎
-          </span>
-          Later
-        </button>
+        <div className={rpgChoices}>
+          <button type="button" onClick={() => setHidden(true)} className={rpgChoice}>
+            <ChoiceMarker />
+            Later
+          </button>
+        </div>
       </div>
       <span aria-hidden="true" className="speech-tail [--tail-fill:var(--text)] [--tail-outline:var(--accent)]" />
     </div>

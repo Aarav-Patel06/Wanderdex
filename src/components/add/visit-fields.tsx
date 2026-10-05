@@ -51,7 +51,7 @@ const RATINGS = Array.from({ length: 10 }, (_, index) => String(index + 1));
 // range (From / To).
 export const segmented = "grid w-full items-stretch gap-0 border-t-4 border-l-4 border-text";
 export const segment =
-  "h-11 min-w-0 border-r-4 border-b-4 border-text bg-background px-1 text-text hover:bg-surface-dark data-[state=on]:bg-accent data-[state=on]:hover:bg-accent focus-visible:ring-0 active:translate-x-0 active:translate-y-0";
+  "h-11 min-w-0 border-r-4 border-b-4 border-text bg-background px-1 text-text hover:bg-surface-dark data-[state=on]:bg-accent data-[state=on]:hover:bg-accent focus-visible:z-10 focus-visible:ring-0 active:translate-x-0 active:translate-y-0";
 
 // Date & time with its precision control, as local wall-clock values in `timeZone`, the place's.
 export function WhenField({
@@ -109,7 +109,7 @@ export function WhenField({
                 type="button"
                 disabled={disabled}
                 aria-label={`${when.precision === "month" ? "Month" : "Date"}: ${formatDay(when)}`}
-                className="flex min-h-11 w-full items-center gap-2 bg-background px-2.5 text-left text-body text-text disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex min-h-11 w-full items-center gap-2 bg-background px-2.5 text-left text-body text-text [--focus-offset:6px] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {formatDay(when)}
                 <CalendarIcon aria-hidden="true" className="ml-auto size-6 shrink-0" />

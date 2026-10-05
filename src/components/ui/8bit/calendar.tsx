@@ -57,7 +57,7 @@ function Calendar({ className, classNames, font, ...props }: CalendarProps) {
           caption_label: "select-none text-body",
           weekday: "flex-1 select-none text-small text-text",
           day_button:
-            "text-body font-normal hover:bg-surface-dark data-[selected-single=true]:bg-accent data-[selected-single=true]:text-text",
+            "text-body font-normal hover:bg-surface-dark focus-visible:z-20 data-[selected-single=true]:bg-accent data-[selected-single=true]:text-text",
           ...classNames,
         }}
         components={{

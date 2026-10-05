@@ -145,7 +145,7 @@ export function ConfirmCard({
             // one is accent with dark text. The list never changes while the card is open.
             <label
               key={index}
-              className="flex min-h-11 cursor-pointer items-center gap-3 border-4 border-text bg-background px-2 py-0.5 has-checked:bg-accent has-focus-visible:outline-4 has-focus-visible:outline-offset-2 has-focus-visible:outline-accent"
+              className="flex min-h-11 cursor-pointer items-center gap-3 border-4 border-text bg-background px-2 py-0.5 has-checked:bg-accent has-focus-visible:outline-4 has-focus-visible:outline-accent has-focus-visible:[box-shadow:var(--focus-ring)]"
             >
               <input
                 type="radio"

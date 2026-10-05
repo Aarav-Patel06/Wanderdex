@@ -5,6 +5,7 @@ import {
   clusterLabel,
   clusterZoomAt,
   countryCodes,
+  leftClearOf,
   type MapPlace,
   mapZoomFor,
   pinSizeAt,
@@ -119,5 +120,32 @@ describe("clusterLabel", () => {
     [1234, "99+"],
   ])("%i → %s", (count, label) => {
     expect(clusterLabel(count)).toBe(label);
+  });
+});
+
+describe("leftClearOf", () => {
+  // A 375px phone's control column: the avatar, then the zoom and legend buttons.
+  const controls = [
+    { left: 315, top: 16, right: 359, bottom: 60 },
+    { left: 311, top: 76, right: 359, bottom: 120 },
+    { left: 311, top: 136, right: 359, bottom: 180 },
+  ];
+
+  it("leaves a popup that's already clear where it is", () => {
+    expect(leftClearOf({ left: 20, top: 30, right: 270, bottom: 200 }, controls, 26)).toBe(0);
+  });
+
+  it("moves an overlapping popup left of the controls, gap included", () => {
+    expect(leftClearOf({ left: 60, top: 30, right: 316, bottom: 200 }, controls, 26)).toBe(311 - 26 - 316);
+  });
+
+  it("counts a popup inside the gap as overlapping", () => {
+    expect(leftClearOf({ left: 30, top: 100, right: 290, bottom: 160 }, controls, 26)).toBe(-5);
+  });
+
+  it("ignores controls above or below the popup's rows", () => {
+    expect(leftClearOf({ left: 100, top: 220, right: 356, bottom: 400 }, controls, 26)).toBe(0);
+    // Only the avatar shares its rows.
+    expect(leftClearOf({ left: 60, top: 0, right: 300, bottom: 40 }, controls, 26)).toBe(315 - 26 - 300);
   });
 });

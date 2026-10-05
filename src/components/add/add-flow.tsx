@@ -277,7 +277,7 @@ export function AddFlow() {
   function saved(result: SavedVisit) {
     const { place, visit } = result;
     for (const { title, ...options } of saveToasts(result)) toast(title, options);
-    if (open && !isDesktop) close(); // reset() runs when the drawer has slid away
+    if (open && !isDesktop) close(); // the drawer's onClosed resets the flow
     else reset();
     addPin({
       id: place.id,
@@ -376,7 +376,7 @@ export function AddFlow() {
         </ConfirmPanel>
       )}
 
-      {/* Mobile drawer. Closing it resets the flow once it has slid away. */}
+      {/* Mobile drawer. Any close resets the flow, so the next Add Visit opens the mode menu. */}
       <AddDrawer
         open={open && !isDesktop}
         onClose={close}

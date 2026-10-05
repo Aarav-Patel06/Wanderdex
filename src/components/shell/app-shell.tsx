@@ -130,10 +130,12 @@ export function AppShell({ username, children }: { username: string; children: R
       </aside>
 
       {/* Mobile: bottom padding = the fixed tab bar (4rem tabs + safe-area inset), so nothing hides behind it.
+          Scroll padding: an element scrolled into view by keyboard focus stops above the tab bar
+          (whose scrollport it shares) with room for its focus outline, not under the bar.
           Desktop: pages other than the Overworld start past the sidebar (1rem margin + 20rem + 1rem). */}
       <main
         className={cn(
-          "relative min-h-0 flex-1 overflow-y-auto pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0",
+          "relative min-h-0 flex-1 scroll-pt-3 scroll-pb-[calc(4rem+env(safe-area-inset-bottom)+0.75rem)] overflow-y-auto pb-[calc(4rem+env(safe-area-inset-bottom))] md:scroll-pb-3 md:pb-0",
           pathname !== "/" && "md:pl-88",
         )}
       >
@@ -144,8 +146,10 @@ export function AppShell({ username, children }: { username: string; children: R
           // modal={false}: the menu hands off to the RPG dialog without the two fighting over focus.
           <DropdownMenu modal={false}>
             <DropdownMenuTrigger
+              // The pin popup keeps clear of it, like the map controls under it (map-view.tsx).
+              data-map-control
               aria-label={`${username} menu`}
-              className="absolute top-[calc(1rem+env(safe-area-inset-top))] right-[calc(1rem+env(safe-area-inset-right))] shadow-pixel md:hidden"
+              className="user-menu absolute top-[calc(1rem+env(safe-area-inset-top))] right-[calc(1rem+env(safe-area-inset-right))] shadow-pixel md:hidden"
             >
               <UserInitial initial={initial} />
             </DropdownMenuTrigger>

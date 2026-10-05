@@ -32,6 +32,7 @@ import {
   clusterLabel,
   clusterZoomAt,
   countryCodes,
+  leftClearOf,
   type MapPlace,
   mapZoomFor,
   type NewPin,
@@ -84,6 +85,12 @@ const LOAD_TIMEOUT_MS = 20_000;
 // TAIL_INSET px in from that corner, under the tail.
 const TAIL_REACH = 26;
 const TAIL_INSET = 30;
+
+// The room the pin popup keeps from the map controls (data-map-control: the zoom and legend
+// buttons, and the phone's avatar button), measured from box to box: the card's pixel border
+// (6px) and shadow (4px) on one side, the buttons' border (4px) on the other, and 12px clear,
+// like a button group.
+const CONTROL_CLEARANCE = 26;
 
 // The selected pin is anchored at its bottom tip and is pinHeight tall (selectedPinSize). The
 // card sits above it (bottom anchors), or below the tip when there's no room above.
@@ -452,10 +459,20 @@ export function MapView({
       .setLngLat([selected.lng, selected.lat])
       .setDOMContent(popupNode)
       .addTo(map);
+    // Its anchor can't always keep it clear of the map controls (a pin right beside them leaves no
+    // anchor that fits), so once it's placed, the map pans left just enough (SPEC §13.4).
+    const frame = requestAnimationFrame(() => {
+      const controls = Array.from(document.querySelectorAll("[data-map-control]"), (element) =>
+        element.getBoundingClientRect(),
+      ).filter((rect) => rect.width && rect.height);
+      const dx = leftClearOf(popup.getElement().getBoundingClientRect(), controls, CONTROL_CLEARANCE);
+      if (dx < 0) map.panBy([-dx, 0]);
+    });
     // Tapping the map closes it (closeOnClick).
     const onClose = () => setSelectedId(null);
     popup.on("close", onClose);
     return () => {
+      cancelAnimationFrame(frame);
       popup.off("close", onClose);
       popup.remove();
     };
@@ -577,6 +594,7 @@ export function MapView({
           mr-1: the border's outer edge lines up with the avatar's. z-10 keeps them above the
           legend and the popups. */}
       <div
+        data-map-control
         className={cn(
           CONTROLS_TOP,
           "absolute right-[calc(1rem+var(--map-right,0px)+env(safe-area-inset-right))] z-10 flex flex-col gap-4",

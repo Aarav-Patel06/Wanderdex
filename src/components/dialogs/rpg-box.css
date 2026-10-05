@@ -1,12 +1,13 @@
-/* The RPG box's choices (rpg-box.tsx): one "▶" cursor at a time, beside the hovered choice, else
-   the keyboard-focused one, else the first, nudging like the sidebar's (nav-cursor keyframes in
-   shell.css). Hidden markers keep their space, so the labels never shift. */
+/* RPG choices (rpg-box.tsx; also the RPG dialog's): one "▶" cursor at a time, beside the hovered
+   choice, else the keyboard-focused one, else the first, nudging like the sidebar's (nav-cursor
+   keyframes in shell.css). Hidden markers keep their space, so the labels never shift. A choice
+   may sit in a list item; "first" is the list's first child. */
 .rpg-choice-marker {
   visibility: hidden;
 }
 .rpg-choice:hover > .rpg-choice-marker,
 .rpg-choices:not(:has(.rpg-choice:hover)) .rpg-choice:focus-visible > .rpg-choice-marker,
-.rpg-choices:not(:has(.rpg-choice:hover, .rpg-choice:focus-visible)) .rpg-choice:first-child > .rpg-choice-marker {
+.rpg-choices:not(:has(.rpg-choice:hover, .rpg-choice:focus-visible)) > :first-child .rpg-choice-marker {
   visibility: visible;
   animation: nav-cursor 0.8s steps(1) infinite;
 }

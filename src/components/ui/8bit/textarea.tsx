@@ -34,7 +34,7 @@ function Textarea({ font, ...props }: BitTextareaProps) {
       <ShadcnTextarea
         {...props}
         className={cn(
-          "rounded-none transition-transform ring-0 border-0 bg-background text-body text-text md:text-body placeholder:text-text/70",
+          "rounded-none transition-transform ring-0 border-0 bg-background text-body text-text md:text-body placeholder:text-text/70 [--focus-offset:6px]",
           font === "retro" && "retro",
           className
         )}

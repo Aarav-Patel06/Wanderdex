@@ -642,10 +642,10 @@ The sheet's "VT223" is a typo for VT323. Line height ~1.2 for VT323, ~1.5 for Pr
 ### 16.5 Component rules (checklist for every UI element)
 1. Uses only theme tokens and the two fonts.
 2. Square corners, solid offset shadow (e.g. `4px 4px 0 var(--text)`), no gradients.
-3. Tested at 375px wide; tap targets at least 44px tall.
+3. Tested at 375px wide; tap targets at least 44px tall. Exception: links inline in a line of text, like the map attribution's credit links (WCAG 2.5.8's inline exception).
 4. Pixel fonts and sprites only at whole-number sizes (fonts per §16.4; sprites at 1×, 2×, 3×, 4×).
 5. Only light CSS animations (e.g. `steps()` sprite-style motion). No heavy animation libraries. Respect `prefers-reduced-motion`.
-6. Visible keyboard focus state in pixel style (e.g. accent outline).
+6. Visible keyboard focus state in pixel style: a two-tone ring, a 4px `accent` outline around the element (outside its pixel border, if it has one) with a 2px `text` line around that, so at least one of the two reaches 3:1 on the light fills, the map's land and water, and the dark boxes alike.
 7. Adjacent buttons use the shared button-group gap (`gap-button-group`, 28px, in rows and between wrapped or stacked rows), so their pixel borders and shadows never touch.
 
 ### 16.6 Component mapping

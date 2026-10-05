@@ -43,7 +43,7 @@ export function MonthPicker({ value, onSelect }: { value: string; onSelect: (mon
               onClick={() => onSelect(month)}
               // Opens on the chosen month, as the calendar opens on the chosen day.
               autoFocus={chosen}
-              className="h-11 w-20 text-body hover:bg-surface-dark aria-pressed:bg-accent aria-pressed:text-text"
+              className="h-11 w-20 text-body hover:bg-surface-dark focus-visible:relative focus-visible:z-10 aria-pressed:bg-accent aria-pressed:text-text"
             >
               {label}
             </button>

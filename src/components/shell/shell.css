@@ -260,6 +260,18 @@
 .tab-item:active > * {
   translate: 0 2px;
 }
+/* The outer tabs touch the screen edges, so the focus ring is drawn inside each tab. */
+.tab-item:focus-visible {
+  outline-offset: -4px;
+  box-shadow: inset var(--focus-ring);
+}
+
+/* The Overworld's avatar menu button (phones) keeps its offset shadow under the focus ring. */
+.user-menu:focus-visible {
+  box-shadow:
+    var(--focus-ring),
+    4px 4px 0 var(--text);
+}
 
 @media (prefers-reduced-motion: reduce) {
   .nav-cursor,

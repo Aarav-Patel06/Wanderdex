@@ -83,7 +83,9 @@ export function AddPanel({
   const dropPinInMessage = message?.kind === "error" && message.dropPin;
 
   return (
-    <div className="flex flex-col gap-6">
+    // In the drawer's grid, Upload Photo's "Choose photo" sits right under the mode buttons, so
+    // the rows are a button group apart (SPEC §16.5 rule 7).
+    <div className={cn("flex flex-col", list ? "gap-6" : "gap-button-group")}>
       {list ? (
         !mode && (
           // The first mode takes focus as the bubble opens (and on the way back), so the cursor

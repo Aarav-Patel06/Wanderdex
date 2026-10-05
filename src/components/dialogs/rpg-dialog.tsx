@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 
+import { ChoiceMarker, rpgChoice, rpgChoices } from "@/components/dialogs/rpg-box";
 import {
   Dialog,
   DialogContent,
@@ -32,8 +33,9 @@ interface RpgDialogProps {
   className?: string;
 }
 
-// The app's only dialog style (SPEC §3, §16.6): dark box, accent pixel border,
-// cream text, vertical choices with "▶" next to the focused one.
+// The app's only dialog style (SPEC §3, §16.6): dark box, accent pixel border with the RPG box's
+// gold corner pixels and offset shadow, cream text, and the RPG box's choices: one "▶" beside the
+// hovered choice, else the focused one, else the first (rpg-box.css).
 // Radix handles the focus trap, Escape to close, and focusing the first choice (or the first
 // field of its content) on open.
 export function RpgDialog({
@@ -73,17 +75,23 @@ export function RpgDialog({
         // Centered with inset-0 + auto margins instead of the base dialog's translate(-50%, -50%),
         // which can land on half pixels and blur the pixel borders (fills bleed past them).
         className={cn(
-          "inset-0 m-auto flex h-fit max-h-[calc(100dvh-2rem)] translate-x-0 translate-y-0 flex-col gap-6 bg-text p-6 text-background ring-0 sm:max-w-md *:aria-hidden:border-accent",
+          "inset-0 m-auto flex h-fit max-h-[calc(100dvh-2rem)] translate-x-0 translate-y-0 flex-col gap-6 bg-text p-6 text-background ring-0 drop-shadow-pixel sm:max-w-md *:aria-hidden:border-accent",
           className,
         )}
       >
+        {/* The 8bit border's corners are notched; these sit in its inner corners, as on the RpgBox. */}
+        <span aria-hidden="true" className="rpg-box-corner top-0 left-0" />
+        <span aria-hidden="true" className="rpg-box-corner top-0 right-0" />
+        <span aria-hidden="true" className="rpg-box-corner bottom-0 left-0" />
+        <span aria-hidden="true" className="rpg-box-corner right-0 bottom-0" />
         <DialogTitle className="shrink-0 text-h3">{title}</DialogTitle>
         {description && (
           <DialogDescription className="shrink-0 text-body text-background">{description}</DialogDescription>
         )}
-        {/* -m/p: fields' pixel borders sit 6px outside them, inside the scroll box's clip. */}
-        {children && <div className="-m-1.5 min-h-0 overflow-y-auto p-1.5">{children}</div>}
-        <ul className="flex shrink-0 flex-col gap-1" onKeyDown={handleKeyDown}>
+        {/* -m/p: fields' pixel borders sit 6px outside them, inside the scroll box's clip.
+            scroll-py: a field scrolled into view by keyboard focus keeps its focus outline inside. */}
+        {children && <div className="-m-1.5 min-h-0 scroll-py-3 overflow-y-auto p-1.5">{children}</div>}
+        <ul className={cn(rpgChoices, "shrink-0")} onKeyDown={handleKeyDown}>
           {choices.map((choice, i) => (
             <li key={choice.label}>
               <button
@@ -94,11 +102,9 @@ export function RpgDialog({
                 onFocus={() => setFocused(i)}
                 onClick={choice.onSelect}
                 disabled={choice.disabled}
-                className="retro flex min-h-11 w-full items-center gap-3 text-left text-button disabled:opacity-50"
+                className={cn(rpgChoice, "w-full text-left disabled:opacity-50")}
               >
-                <span aria-hidden="true" className="w-4 text-accent">
-                  {focused === i ? "▶︎" : ""}
-                </span>
+                <ChoiceMarker />
                 {choice.label}
               </button>
             </li>

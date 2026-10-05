@@ -250,12 +250,12 @@ function DateRange({ from, to, onChange }: Range & { onChange: (range: Range) =>
             type="button"
             aria-label={`Date: ${summary}`}
             className={cn(
-              "flex min-h-11 w-full items-center justify-between gap-1.5 bg-background pr-2 pl-2.5 text-left text-body text-text",
+              "flex min-h-11 w-full items-center justify-between gap-1.5 bg-background pr-2 pl-2.5 text-left text-body text-text [--focus-offset:6px]",
               active && "bg-accent",
             )}
           >
             <span className="min-w-0 truncate">Date</span>
-            <ChevronDown aria-hidden="true" className="size-4 shrink-0" />
+            <ChevronDown aria-hidden="true" className="size-6 shrink-0" />
           </button>
         </PopoverTrigger>
         <div aria-hidden="true" className="pointer-events-none absolute inset-0 -mx-1.5 border-x-6 border-text" />

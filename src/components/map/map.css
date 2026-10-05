@@ -7,6 +7,23 @@
   image-rendering: pixelated;
 }
 
+/* The canvas takes keyboard focus (arrow keys pan; drop a pin focuses it). It fills the map, so
+   the focus ring (SPEC §16.5, globals.css) is drawn just inside its edges, on a layer over it:
+   the canvas's own picture would cover an inset shadow. */
+.maplibregl-canvas:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+.maplibregl-canvas-container:has(> .maplibregl-canvas:focus-visible)::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  box-shadow:
+    inset 0 0 0 4px var(--accent),
+    inset var(--focus-ring);
+  pointer-events: none;
+}
+
 /* Required attribution (SPEC §12.4, §18), restyled as a small pixel panel. */
 .maplibregl-ctrl-bottom-right {
   right: env(safe-area-inset-right);
@@ -17,9 +34,11 @@
     bottom: env(safe-area-inset-bottom);
   }
 }
+/* 6px of padding top and bottom: the links' focus ring (6px around them) fits inside the panel,
+   since the map clips anything past its bottom edge. */
 .maplibregl-ctrl.maplibregl-ctrl-attrib {
   margin: 0;
-  padding: 2px 8px;
+  padding: 6px 8px;
   border-top: 4px solid var(--text);
   border-left: 4px solid var(--text);
   background: var(--surface);

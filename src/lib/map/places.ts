@@ -79,3 +79,13 @@ export function mapZoomFor(clusterZoom: number) {
   while (clusterZoomAt(zoom) < clusterZoom) zoom += 1;
   return zoom;
 }
+
+type Box = { left: number; top: number; right: number; bottom: number };
+
+// How far left (0 or less) the open pin popup has to move so that it overlaps none of the map
+// controls (SPEC §13.4), with `gap` px between: the controls are a column on the map's right, so
+// moving left clears every control that shares the popup's rows, and the others don't matter.
+export function leftClearOf(popup: Box, controls: Box[], gap: number) {
+  const inRows = controls.filter((c) => c.top - gap < popup.bottom && c.bottom + gap > popup.top);
+  return Math.min(0, ...inRows.map((c) => c.left - gap - popup.right));
+}

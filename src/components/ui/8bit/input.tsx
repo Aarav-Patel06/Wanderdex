@@ -39,7 +39,7 @@ function Input({ ...props }: BitInputProps) {
       <ShadcnInput
         {...props}
         className={cn(
-          "rounded-none ring-0 !w-full min-h-11 bg-background text-body text-text md:text-body placeholder:text-text/70",
+          "rounded-none ring-0 !w-full min-h-11 bg-background text-body text-text md:text-body placeholder:text-text/70 [--focus-offset:6px]",
           font === "retro" && "retro",
           className
         )}

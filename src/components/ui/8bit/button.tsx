@@ -118,6 +118,8 @@ function Button({
         "rounded-none transition-none relative inline-flex items-center justify-center gap-1.5 border-none min-h-11 px-4 text-button",
         buttonVariants({ variant }),
         size === "icon" && "mx-1 my-0 size-11 px-0",
+        // The focus ring (globals.css) goes outside the pixel border, which would cover it.
+        variant !== "ghost" && variant !== "link" && (size === "icon" ? "[--focus-offset:4px]" : "[--focus-offset:6px]"),
         font !== "normal" && "retro",
         className
       )}

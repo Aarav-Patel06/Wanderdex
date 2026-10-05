@@ -52,7 +52,9 @@ function Toast({ id, title, description, variant }: ToastProps) {
       >
         <div className="flex-1">
           <p className="text-body">{title}</p>
-          {description && <p className="text-small">{description}</p>}
+          {/* 22px lines, not 18px × 1.2: sonner stacks toasts with a transform by their heights,
+              so a fractional height would put the next toast's pixel text between pixels. */}
+          {description && <p className="text-small leading-[22px]">{description}</p>}
         </div>
         <button
           type="button"
