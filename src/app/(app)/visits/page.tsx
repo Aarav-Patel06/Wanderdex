@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { loadVisits } from "@/app/(app)/visits/actions";
 import { FilterBar } from "@/app/(app)/visits/filter-bar";
 import { VisitList } from "@/app/(app)/visits/visit-list";
+import { readAllPages } from "@/lib/paging";
 import { createClient } from "@/lib/supabase/server";
 import { filterOptions, filtersFromSearchParams, filtersSearch, hasFilters } from "@/lib/visit-filters";
 
@@ -36,15 +37,19 @@ export default async function VisitsPage({ searchParams }: PageProps<"/visits">)
   );
 }
 
-// The city and country dropdowns' values, from the user's own visits. The user's session
-// applies, so RLS returns only their own visits (SPEC §9).
+// The city and country dropdowns' values, from all of the user's own visits, a page at a time.
+// The user's session applies, so RLS returns only their own visits (SPEC §9).
 async function loadFilterOptions() {
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("visits")
-    .select("places!inner(city, country)")
-    // Untyped client: it can't tell that `places` is many-to-one (one object, not an array).
-    .overrideTypes<{ places: { city: string | null; country: string | null } }[], { merge: false }>();
-  if (error) throw error;
-  return filterOptions(data.map(({ places }) => places));
+  const rows = await readAllPages((from, to) =>
+    supabase
+      .from("visits")
+      .select("places!inner(city, country)")
+      // A stable order, so pages don't overlap.
+      .order("id")
+      .range(from, to)
+      // Untyped client: it can't tell that `places` is many-to-one (one object, not an array).
+      .overrideTypes<{ places: { city: string | null; country: string | null } }[], { merge: false }>(),
+  );
+  return filterOptions(rows.map(({ places }) => places));
 }

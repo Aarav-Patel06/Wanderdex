@@ -222,29 +222,46 @@ describe("filterVisits", () => {
 });
 
 describe("visitTimeZones", () => {
-  function fakeClient(result: { data: unknown; error: unknown }) {
+  // Serves `rows` a range at a time, like the Supabase query builder, or fails with `error`.
+  function fakeClient(rows: { timezone: string }[] | null, error: unknown = null) {
     const calls: unknown[][] = [];
+    let range: [number, number] = [0, Infinity];
     const builder = {
       from: (...args: unknown[]) => (calls.push(["from", ...args]), builder),
       select: (...args: unknown[]) => (calls.push(["select", ...args]), builder),
+      order: (...args: unknown[]) => (calls.push(["order", ...args]), builder),
+      range: (from: number, to: number) => (calls.push(["range", from, to]), (range = [from, to]), builder),
       overrideTypes: () => builder,
-      then: (resolve: (value: typeof result) => unknown) => resolve(result),
+      then: (resolve: (value: unknown) => unknown) =>
+        resolve({ data: rows && rows.slice(range[0], range[1] + 1), error }),
     };
     return { client: builder as unknown as SupabaseClient, calls };
   }
 
-  it("reads the visits' zones, each once", async () => {
+  it("reads the visits' zones, each once, in a stable order", async () => {
     const rows = [{ timezone: "Asia/Tokyo" }, { timezone: "UTC" }, { timezone: "Asia/Tokyo" }];
-    const { client, calls } = fakeClient({ data: rows, error: null });
+    const { client, calls } = fakeClient(rows);
     expect(await visitTimeZones(client)).toEqual(["Asia/Tokyo", "UTC"]);
     expect(calls).toEqual([
       ["from", "visits"],
       ["select", "timezone"],
+      ["order", "id"],
+      ["range", 0, 999],
+    ]);
+  });
+
+  it("reads past the first 1,000 visits", async () => {
+    const rows = [...Array.from({ length: 1000 }, () => ({ timezone: "UTC" })), { timezone: "Asia/Tokyo" }];
+    const { client, calls } = fakeClient(rows);
+    expect(await visitTimeZones(client)).toEqual(["UTC", "Asia/Tokyo"]);
+    expect(calls.filter(([name]) => name === "range")).toEqual([
+      ["range", 0, 999],
+      ["range", 1000, 1999],
     ]);
   });
 
   it("throws on a query error", async () => {
-    const { client } = fakeClient({ data: null, error: new Error("boom") });
+    const { client } = fakeClient(null, new Error("boom"));
     await expect(visitTimeZones(client)).rejects.toThrow("boom");
   });
 });

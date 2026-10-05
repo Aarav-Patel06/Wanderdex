@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { startOfLocalDay } from "@/lib/dates";
+import { readAllPages } from "@/lib/paging";
 import type { VisitFilters } from "@/lib/visit-filters";
 
 // My Visits' filters (SPEC §14.3) as a query on visits, with places embedded as
@@ -83,13 +84,17 @@ export function filterVisits<Q extends Filterable<Q>>(query: Q, filters: VisitFi
   return filtered;
 }
 
-// The distinct time zones of the user's visits. The user's session client, so RLS limits it to
-// their own visits (SPEC §9).
+// The distinct time zones of all the user's visits, read a page at a time. The user's session
+// client, so RLS limits it to their own visits (SPEC §9).
 export async function visitTimeZones(supabase: SupabaseClient) {
-  const { data, error } = await supabase
-    .from("visits")
-    .select("timezone")
-    .overrideTypes<{ timezone: string }[], { merge: false }>();
-  if (error) throw error;
-  return [...new Set(data.map(({ timezone }) => timezone))];
+  const rows = await readAllPages((from, to) =>
+    supabase
+      .from("visits")
+      .select("timezone")
+      // A stable order, so pages don't overlap.
+      .order("id")
+      .range(from, to)
+      .overrideTypes<{ timezone: string }[], { merge: false }>(),
+  );
+  return [...new Set(rows.map(({ timezone }) => timezone))];
 }

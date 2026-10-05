@@ -39,7 +39,7 @@ type Placing = { at: LatLng | null; start: LatLng | null; taken: PhotoTaken | nu
 // the card for the new place, named there.
 export function AddFlow() {
   const router = useRouter();
-  const { addPin, setDrop } = useOverworld();
+  const { addPin, setDrop, mapCenter } = useOverworld();
   const { open, toggle, close } = useAddVisit();
   const isDesktop = useIsDesktop();
   const bubbleOpen = open && isDesktop;
@@ -358,6 +358,10 @@ export function AddFlow() {
           verb={isDesktop ? "Click" : "Tap"}
           placed={placing.at !== null}
           busy={confirmingPin}
+          onCenter={() => {
+            const center = mapCenter();
+            if (center) pick(center);
+          }}
           onConfirm={confirmPin}
           onCancel={() => setPlacing(null)}
         />
@@ -413,19 +417,22 @@ async function zoneAt({ lat, lng }: LatLng) {
   }
 }
 
-// While placing a pin (SPEC §11.4): what to do, and Confirm / Cancel, over the bottom of the map,
+// While placing a pin (SPEC §11.4): what to do, "Drop pin at center" (at the map's crosshair, for
+// keyboards, or a precise spot on a phone), and Confirm / Cancel, over the bottom of the map,
 // just above the attribution (which must stay visible, SPEC §12.4, and wraps to two lines on
 // phones, hence measured). Desktop: beside the sidebar; phones: across the map.
 function PinBanner({
   verb,
   placed,
   busy,
+  onCenter,
   onConfirm,
   onCancel,
 }: {
   verb: "Click" | "Tap";
   placed: boolean;
   busy: boolean;
+  onCenter: () => void;
   onConfirm: () => void;
   onCancel: () => void;
 }) {
@@ -459,6 +466,17 @@ function PinBanner({
             {placed ? `Pin dropped. ${verb} again to move it.` : `${verb} the map to drop a pin.`}
           </p>
           <div className="flex flex-wrap gap-button-group px-1.5">
+            {/* Its own row. The label is 288px of Press Start 2P, more than a 375px phone's banner
+                has, so there it wraps to two lines. */}
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={busy}
+              onClick={onCenter}
+              className="w-full py-2 text-center whitespace-normal"
+            >
+              Drop pin at center
+            </Button>
             <Button type="button" disabled={!placed || busy} onClick={onConfirm} className="flex-1">
               Confirm
             </Button>

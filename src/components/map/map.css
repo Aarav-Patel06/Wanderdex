@@ -140,3 +140,17 @@
 .drop-pin svg {
   display: block;
 }
+
+/* The placing crosshair (map-view.tsx), on the map's center, which map-view.tsx keeps in
+   --crosshair-x/y (the camera's padding moves it right of the desktop sidebar). It's 26px, so
+   its middle pixel's center is 13px in. Above the place pins and the dropped pin, below the map
+   controls (z-10); it never takes a tap. */
+.drop-crosshair {
+  position: absolute;
+  top: var(--crosshair-y, 50%);
+  left: var(--crosshair-x, 50%);
+  z-index: 6;
+  display: block;
+  translate: -13px -13px;
+  pointer-events: none;
+}

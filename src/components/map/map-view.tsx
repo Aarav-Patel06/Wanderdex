@@ -22,8 +22,9 @@ import { Minus } from "pixelarticons/react/Minus";
 import { Plus } from "pixelarticons/react/Plus";
 import Supercluster from "supercluster";
 
+import { SpiritsError } from "@/components/dialogs/rpg-box";
 import { Loading } from "@/components/loading";
-import type { Drop } from "@/components/map/overworld";
+import type { Drop, MapCenterRef } from "@/components/map/overworld";
 import { Button } from "@/components/ui/8bit/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/8bit/card";
 import { CATEGORIES, type Category, CATEGORY_LABELS, categorySprite } from "@/lib/categories";
@@ -75,6 +76,8 @@ const FOCUS_ZOOM = 12;
 // Placing a pin from a photo's coordinates starts at street level, close enough to move it to
 // the right building.
 const DROP_ZOOM = 16;
+// The style and the first tiles have this long to load before the map counts as failed.
+const LOAD_TIMEOUT_MS = 20_000;
 
 // The popup card's pixel tail (map.css) reaches 18px past the card; 8px more leaves room for
 // its 4px shadow plus a gap before the pin. At a corner anchor, the card shifts so the pin is
@@ -150,21 +153,31 @@ type PinProps = { id: string; name: string; category: Category };
 const pinKey = (id: string | null) => `p:${id}`;
 
 // `focus` is the pin to pan to; a new object each time a visit is saved. `coverTick` changes
-// when a panel over the map changes (useMapCover). `drop` is the dropped pin (SPEC §11.4).
+// when a panel over the map changes (useMapCover), and `coverOpens` when one opens. `drop` is the
+// dropped pin (SPEC §11.4). `centerRef` gets a reader for the map's center (its crosshair).
 export function MapView({
   places,
   focus,
   coverTick,
+  coverOpens,
   drop,
+  centerRef,
 }: {
   places: MapPlace[];
   focus: NewPin | null;
   coverTick: number;
+  coverOpens: number;
   drop: Drop | null;
+  centerRef: MapCenterRef;
 }) {
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [map, setMap] = useState<MapLibreMap | null>(null);
   const [loaded, setLoaded] = useState(false);
+  // The style or the first tiles failed, or took too long (SPEC §11.7). Try again builds the map
+  // afresh (a new attempt), without reloading the page.
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   // Pins' and clusters' size (pinSizeAt), updated when a movement ends, so never mid-pinch.
   const [pinSize, setPinSize] = useState(32);
   const [legendOpen, setLegendOpen] = useState(false);
@@ -192,6 +205,14 @@ export function MapView({
   const onPick = drop?.onPick ?? null;
   if (onPick && selectedId) setSelectedId(null);
 
+  // A panel opening over the map (the desktop confirmation panel) closes the popup, which could
+  // otherwise end up under the zoom buttons as they move left of the panel.
+  const [seenCoverOpens, setSeenCoverOpens] = useState(coverOpens);
+  if (coverOpens !== seenCoverOpens) {
+    setSeenCoverOpens(coverOpens);
+    setSelectedId(null);
+  }
+
   const selected = places.find((place) => place.id === selectedId) ?? null;
   const visitedCountries = useMemo(() => countryCodes(places), [places]);
 
@@ -200,6 +221,14 @@ export function MapView({
     let created: MapLibreMap | undefined;
     let dprQuery: MediaQueryList | undefined;
     let onDprChange: (() => void) | undefined;
+    // Until the first full draw, the style request failing, any map error (a tile, a source), or
+    // the timeout means the map failed. Errors after that (a tile while panning offline) are only
+    // logged.
+    let drawn = false;
+    const timeout = setTimeout(() => {
+      console.error(`Overworld map didn't load within ${LOAD_TIMEOUT_MS / 1000} s`);
+      setFailed(true);
+    }, LOAD_TIMEOUT_MS);
     fetch(BASE_STYLE_URL)
       .then((res) => {
         if (!res.ok) throw new Error(`style request failed (${res.status})`);
@@ -233,7 +262,13 @@ export function MapView({
         // The country shapes load once the map has drawn, so they hold up neither the first draw
         // nor the pins. MapLibre fetches and parses them off the main thread; if that fails, it
         // logs the error and the map carries on without the fill.
+        map.on("error", ({ error }) => {
+          console.error("Overworld map error:", error);
+          if (!drawn) setFailed(true);
+        });
         map.once("load", () => {
+          drawn = true;
+          clearTimeout(timeout);
           setLoaded(true);
           map.getSource<GeoJSONSource>(COUNTRIES_SOURCE)?.setData(COUNTRIES_URL);
         });
@@ -303,13 +338,25 @@ export function MapView({
         });
         setMap(map);
       })
-      .catch((error) => console.error("Overworld map failed to load:", error));
+      .catch((error) => {
+        if (cancelled) return;
+        console.error("Overworld map failed to load:", error);
+        setFailed(true);
+      });
     return () => {
       cancelled = true;
+      clearTimeout(timeout);
       if (onDprChange) dprQuery?.removeEventListener("change", onDprChange);
       created?.remove();
     };
-  }, [startBounds]);
+  }, [startBounds, attempt]);
+
+  function retry() {
+    setFailed(false);
+    setLoaded(false);
+    setMap(null);
+    setAttempt((count) => count + 1);
+  }
 
   // HTML markers only, never symbol layers: the canvas is pixelated, markers stay crisp (SPEC §13.4).
   // Recomputed on moveend, which zooming fires too, and only for what's in view. Clustered at
@@ -333,10 +380,14 @@ export function MapView({
         if (!marker) {
           const element =
             "cluster" in props
-              ? pinButton(`${props.point_count} places`, "/sprites/pin_group.png", clusterLabel(props.point_count), () =>
-                  map.easeTo({ center: [lng, lat], zoom: mapZoomFor(index.getClusterExpansionZoom(props.cluster_id)) }),
-                )
-              : pinButton(props.name, categorySprite(props.category), null, () => setSelectedId(props.id));
+              ? pinButton(`${props.point_count} places`, "/sprites/pin_group.png", clusterLabel(props.point_count), () => {
+                  setLegendOpen(false);
+                  map.easeTo({ center: [lng, lat], zoom: mapZoomFor(index.getClusterExpansionZoom(props.cluster_id)) });
+                })
+              : pinButton(props.name, categorySprite(props.category), null, () => {
+                  setLegendOpen(false);
+                  setSelectedId(props.id);
+                });
           marker = new Marker({ element, anchor: "bottom" }).setLngLat([lng, lat]).addTo(map);
         }
         next.set(key, marker);
@@ -358,6 +409,22 @@ export function MapView({
       shown.clear();
     };
   }, [map, index]);
+
+  // The legend (SPEC §13.6) also closes on Escape and on a tap or click on the map (a pin tap
+  // closes it too, above). MapLibre doesn't report a drag or a pinch as a click.
+  useEffect(() => {
+    if (!legendOpen) return;
+    const close = () => setLegendOpen(false);
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !event.defaultPrevented) close();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    map?.on("click", close);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      map?.off("click", close);
+    };
+  }, [map, legendOpen]);
 
   // The style is ready from the first full draw. setFilter skips an unchanged filter.
   useEffect(() => {
@@ -435,6 +502,40 @@ export function MapView({
     };
   }, [map, onPick]);
 
+  // The center of the part of the map the panels leave uncovered, where the crosshair is: "Drop pin
+  // at center" places the pin there (SPEC §11.4).
+  useEffect(() => {
+    if (!map) return;
+    centerRef.current = () => {
+      const center = map.getCenter();
+      return { lat: center.lat, lng: center.wrap().lng };
+    };
+    return () => {
+      centerRef.current = null;
+    };
+  }, [map, centerRef]);
+
+  // While placing: the crosshair follows the camera's padding (the desktop sidebar), which only
+  // changes when a movement ends or the map resizes. The map takes focus, so the arrow keys pan it.
+  const placing = onPick !== null;
+  useEffect(() => {
+    if (!map || !placing) return;
+    const wrapper = wrapperRef.current;
+    const place = () => {
+      const { x, y } = map.project(map.getCenter());
+      wrapper?.style.setProperty("--crosshair-x", `${Math.round(x)}px`);
+      wrapper?.style.setProperty("--crosshair-y", `${Math.round(y)}px`);
+    };
+    place();
+    map.on("moveend", place);
+    map.on("resize", place);
+    map.getCanvas().focus({ preventScroll: true });
+    return () => {
+      map.off("moveend", place);
+      map.off("resize", place);
+    };
+  }, [map, placing]);
+
   // Starting from a photo's coordinates: fly there, close enough to adjust the pin.
   const dropStart = drop?.start ?? null;
   useEffect(() => {
@@ -443,8 +544,8 @@ export function MapView({
   }, [map, dropStart]);
 
   return (
-    // data-placing: map.css turns the place pins' taps off and shows a crosshair.
-    <div className="absolute inset-0" data-placing={onPick ? "" : undefined}>
+    // data-placing: map.css turns the place pins' taps off and shows a crosshair cursor.
+    <div ref={wrapperRef} className="absolute inset-0" data-placing={onPick ? "" : undefined}>
       {/* data-pixelated is set on it by the mode switch; the pin sizes are for map.css. */}
       <div
         ref={containerRef}
@@ -452,11 +553,22 @@ export function MapView({
         className="size-full"
       />
 
-      {/* Until the first full draw (same plate as the code-loading one in overworld.tsx). */}
-      {!loaded && (
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <Loading className="bg-text px-4 py-3 text-background" />
+      {/* While placing a pin: the crosshair at the map's center, where "Drop pin at center" puts
+          the pin. */}
+      {placing && <Crosshair />}
+
+      {/* Until the first full draw (same plate as the code-loading one in overworld.tsx), or, if
+          the map failed, the RPG error with Try again in its place. z-10: above the pins. */}
+      {failed ? (
+        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center p-4 *:pointer-events-auto">
+          <SpiritsError onRetry={retry} />
         </div>
+      ) : (
+        !loaded && (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <Loading className="bg-text px-4 py-3 text-background" />
+          </div>
+        )
       )}
 
       {/* Mobile: below the avatar menu button (top-right, 44px + shadow), with the same inset from
@@ -581,6 +693,51 @@ function dropPinElement() {
   element.className = "drop-pin";
   element.innerHTML = DROP_PIN_SVG;
   return element;
+}
+
+// The placing crosshair: a pixel plus with a gap around its middle pixel, on a 13×13 grid at 2×
+// (26px), in `text` with a 1-pixel `background` halo, so it reads over water, land, and buildings.
+const CROSSHAIR_GRID = 13;
+const CROSSHAIR_PATHS = (() => {
+  const mid = (CROSSHAIR_GRID - 1) / 2;
+  const core = new Set([`${mid},${mid}`]);
+  for (let d = 2; d < mid; d++) {
+    for (const [x, y] of [
+      [mid, mid - d],
+      [mid, mid + d],
+      [mid - d, mid],
+      [mid + d, mid],
+    ]) {
+      core.add(`${x},${y}`);
+    }
+  }
+  const halo = new Set<string>();
+  for (const cell of core) {
+    const [x, y] = cell.split(",").map(Number);
+    for (const dx of [-1, 0, 1]) {
+      for (const dy of [-1, 0, 1]) {
+        if (!core.has(`${x + dx},${y + dy}`)) halo.add(`${x + dx},${y + dy}`);
+      }
+    }
+  }
+  const path = (cells: Set<string>) => [...cells].map((cell) => `M${cell.replace(",", " ")}h1v1h-1z`).join("");
+  return { core: path(core), halo: path(halo) };
+})();
+
+function Crosshair() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox={`0 0 ${CROSSHAIR_GRID} ${CROSSHAIR_GRID}`}
+      width={CROSSHAIR_GRID * 2}
+      height={CROSSHAIR_GRID * 2}
+      shapeRendering="crispEdges"
+      className="drop-crosshair"
+    >
+      <path d={CROSSHAIR_PATHS.halo} style={{ fill: "var(--background)" }} />
+      <path d={CROSSHAIR_PATHS.core} style={{ fill: "var(--text)" }} />
+    </svg>
+  );
 }
 
 function markSelected(markers: Map<string, Marker>, selectedId: string | null) {

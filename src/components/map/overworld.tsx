@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, use, useCallback, useMemo, useState } from "react";
+import { createContext, use, useCallback, useMemo, useRef, useState } from "react";
 
 import dynamic from "next/dynamic";
 
@@ -33,11 +33,16 @@ export type Drop = {
 type OverworldApi = {
   // Puts a just-saved visit's pin on the map and pans to it (SPEC §11.6 step 7).
   addPin: (pin: NewPin) => void;
-  // A floating panel over the map (data-map-cover) appeared, resized, or went away.
-  coversChanged: () => void;
+  // A floating panel over the map (data-map-cover) appeared (opened), resized, or went away.
+  coversChanged: (opened?: boolean) => void;
   // The dropped pin, or null for none.
   setDrop: (drop: Drop | null) => void;
+  // Where the map's crosshair is (the center of the uncovered part), or null before it loads.
+  mapCenter: () => LatLng | null;
 };
+
+// MapView fills it in once the map exists.
+export type MapCenterRef = React.RefObject<(() => LatLng) | null>;
 
 const OverworldContext = createContext<OverworldApi | null>(null);
 
@@ -56,7 +61,8 @@ export function useMapCover() {
   return useCallback(
     (element: HTMLElement | null) => {
       if (!element) return;
-      const observer = new ResizeObserver(coversChanged);
+      coversChanged(true);
+      const observer = new ResizeObserver(() => coversChanged());
       observer.observe(element);
       return () => {
         observer.disconnect();
@@ -78,15 +84,22 @@ export function Overworld({
   const [places, setPlaces] = useState(initialPlaces);
   const [focus, setFocus] = useState<NewPin | null>(null);
   const [coverTick, setCoverTick] = useState(0);
+  // How many times a panel has opened over the map; the pin popup closes each time.
+  const [coverOpens, setCoverOpens] = useState(0);
   const [drop, setDrop] = useState<Drop | null>(null);
+  const centerRef: MapCenterRef = useRef(null);
   const api = useMemo<OverworldApi>(
     () => ({
       addPin(pin) {
         setPlaces((current) => addVisit(current, pin));
         setFocus({ ...pin });
       },
-      coversChanged: () => setCoverTick((tick) => tick + 1),
+      coversChanged(opened) {
+        setCoverTick((tick) => tick + 1);
+        if (opened) setCoverOpens((count) => count + 1);
+      },
       setDrop,
+      mapCenter: () => centerRef.current?.() ?? null,
     }),
     [],
   );
@@ -96,7 +109,14 @@ export function Overworld({
       {/* isolate: the map's markers and popups stack below the shell's avatar menu.
           .overworld: map.css moves the map controls clear of the confirmation panel. */}
       <div className="overworld relative isolate h-full bg-map-ocean">
-        <MapView places={places} focus={focus} coverTick={coverTick} drop={drop} />
+        <MapView
+          places={places}
+          focus={focus}
+          coverTick={coverTick}
+          coverOpens={coverOpens}
+          drop={drop}
+          centerRef={centerRef}
+        />
         {places.length === 0 && <EmptyHint />}
         {children}
       </div>

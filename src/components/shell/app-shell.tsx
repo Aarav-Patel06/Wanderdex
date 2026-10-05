@@ -47,14 +47,8 @@ export function AppShell({ username, children }: { username: string; children: R
 
   return (
     <div className="flex h-dvh flex-col md:flex-row">
-      {/* The plain cream pages' background art; not on the Overworld. Phones: between the status
-          bar and the tab bar. Desktop: right of the sidebar, where the content is. */}
-      {pathname !== "/" && (
-        <PageBackground
-          phone="bottom"
-          className="inset-x-0 top-[env(safe-area-inset-top)] bottom-[calc(4rem+env(safe-area-inset-bottom))] md:top-0 md:bottom-0 md:left-88"
-        />
-      )}
+      {/* The plain cream pages' background art; not on the Overworld. */}
+      {pathname !== "/" && <AppPageBackground />}
       {/* A floating RPG box (SPEC §14.1, §16.9). The Overworld's map runs full-bleed behind it and
           keeps its pins clear of it (the map reads data-sidebar); other pages pad past it. */}
       <aside
@@ -216,6 +210,18 @@ export function AppShell({ username, children }: { username: string; children: R
         ]}
       />
     </div>
+  );
+}
+
+// The plain cream pages' background art (SPEC §16.7). Phones: between the status bar and the tab
+// bar. Desktop: right of the sidebar, where the content is. The app's error page shows it on the
+// Overworld's route too, where the map would otherwise be.
+export function AppPageBackground() {
+  return (
+    <PageBackground
+      phone="bottom"
+      className="inset-x-0 top-[env(safe-area-inset-top)] bottom-[calc(4rem+env(safe-area-inset-bottom))] md:top-0 md:bottom-0 md:left-88"
+    />
   );
 }
 

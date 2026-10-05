@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useOptimistic, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useId, useOptimistic, useRef, useState, useTransition } from "react";
 
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -24,6 +24,7 @@ import { useIsDesktop } from "@/components/use-is-desktop";
 import { type Category, categorySprite } from "@/lib/categories";
 import type { Precision } from "@/lib/dates";
 import { saveToasts } from "@/lib/save-toasts";
+import { cn } from "@/lib/utils";
 import type { SavedVisit } from "@/lib/visits";
 
 import "./place.css";
@@ -76,6 +77,11 @@ export function PlaceDetail({
     setAddOpen(true);
   }
 
+  // In the page (narrower desktop windows), the card may open below the fold.
+  const revealPanel = useCallback((panel: HTMLElement | null) => {
+    if (panel && getComputedStyle(panel).position !== "fixed") panel.scrollIntoView({ block: "nearest" });
+  }, []);
+
   function closeAdding() {
     setAddOpen(false);
     if (isDesktop) setAdding(null); // the drawer clears it once it has slid away
@@ -116,10 +122,18 @@ export function PlaceDetail({
   const card = adding && (
     <ConfirmCard key={adding.id} lookup={adding} compact={!isDesktop} onCancel={closeAdding} onSaved={added} />
   );
+  const panelOpen = isDesktop && addOpen && card;
 
   return (
-    // Mobile: the back button sits below the status bar (the viewport runs under it).
-    <section className="flex max-w-2xl flex-col gap-6 px-4 pt-[calc(1rem+env(safe-area-inset-top))] pb-8 md:px-8 md:pt-8">
+    // Mobile: the back button sits below the status bar (the viewport runs under it). Wide
+    // desktop windows: while the side panel is open, the page ends left of it (its width, its
+    // 1rem margin, and both 6px borders), so nothing hides behind it.
+    <section
+      className={cn(
+        "flex max-w-2xl flex-col gap-6 px-4 pt-[calc(1rem+env(safe-area-inset-top))] pb-8 md:px-8 md:pt-8",
+        panelOpen && "xl:mr-[calc(var(--confirm-width)+1rem+12px)]",
+      )}
+    >
       <BackButton fallback="/visits" className="-mb-2 gap-2 self-start px-0 md:hidden" />
 
       <PlaceHeader place={place} />
@@ -140,6 +154,17 @@ export function PlaceDetail({
           Add another visit
         </Button>
       </div>
+
+      {/* The confirmation card, as on the Overworld (SPEC §14.2): on wide desktop windows (xl,
+          1280px) a side panel on the right, over the page, which narrows beside it; on narrower
+          desktop windows there's no room for both, so it opens in the page, right under the
+          button, scrolled into view (mx: its pixel border sits 6px outside it). The drawer on
+          phones. */}
+      {panelOpen && (
+        <ConfirmPanel ref={revealPanel} className="z-20 mx-1.5 w-auto xl:fixed xl:mx-0 xl:w-(--confirm-width)">
+          {card}
+        </ConfirmPanel>
+      )}
 
       {/* mt: the last button's border and shadow reach 10px below it, so the heading sits as
           far from them as the page's other sections (24px) sit from each other. */}
@@ -210,9 +235,6 @@ export function PlaceDetail({
         )}
       </RpgDialog>
 
-      {/* The confirmation card, as on the Overworld (SPEC §14.2): a side panel on the right on
-          desktop, over the page; the drawer on phones. */}
-      {isDesktop && addOpen && card && <ConfirmPanel className="fixed z-20">{card}</ConfirmPanel>}
       <AddDrawer open={addOpen && !isDesktop} onClose={closeAdding} onClosed={() => setAdding(null)} title="Confirm visit">
         {card}
       </AddDrawer>
