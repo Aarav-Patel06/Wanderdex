@@ -1,0 +1,28 @@
+/* Trip Photos review (trip-review.tsx, SPEC §11.8 step 7). */
+
+/* Each stop: a pixel card on surface, like My Visits' rows. Offscreen cards skip style, layout,
+   and paint until they scroll near (content-visibility), at about their usual height meanwhile. */
+.trip-stop {
+  border: 4px solid var(--text);
+  background: var(--surface);
+  box-shadow: 4px 4px 0 var(--text);
+  content-visibility: auto;
+  contain-intrinsic-size: auto 280px;
+}
+
+/* The include checkbox: a real (visually hidden) checkbox and a 28px pixel box beside its label,
+   in a 44px-tall label. The box takes the focus ring, since the input can't show one. */
+.trip-check-box {
+  border: 4px solid var(--text);
+  background: var(--background);
+}
+.trip-check input:checked + .trip-check-box {
+  background: var(--accent);
+}
+.trip-check input:not(:checked) + .trip-check-box > svg {
+  visibility: hidden;
+}
+.trip-check input:focus-visible + .trip-check-box {
+  outline: 4px solid var(--accent);
+  box-shadow: 0 0 0 6px var(--text);
+}

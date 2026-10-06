@@ -88,6 +88,7 @@ Create a key in Google AI Studio (free tier). If Gemini fails or hits its limit,
 pnpm dev     # dev server at http://localhost:3000
 pnpm test    # unit tests (Vitest)
 pnpm lint    # ESLint
+pnpm bench:import   # Trip Photos benchmark: a synthetic trip through the grouping (not part of pnpm test)
 pnpm build   # production build
 pnpm start   # serve the production build locally (after pnpm build)
 ```

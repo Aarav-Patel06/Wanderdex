@@ -12,14 +12,19 @@ export type PhotoTaken = { local: string; offset: string | null };
 
 export type PhotoInfo = { location: LatLng | null; taken: PhotoTaken | null };
 
-// JPEG, PNG, HEIC, and WebP (SPEC §11.2 step 1). Some systems give HEIC files no type, so a file
-// with no type (or a generic one) goes by its extension.
-const PHOTO_TYPES = ["image/jpeg", "image/png", "image/heic", "image/heif", "image/webp"];
-const PHOTO_EXTENSION = /\.(jpe?g|png|hei[cf]|webp)$/i;
+// JPEG, PNG, HEIC, WebP, and the TIFF-based RAW formats exifr reads (SPEC §11.2 step 1): DNG
+// (iPhone ProRAW), Canon CR2, Nikon NEF, Sony ARW, Pentax PEF, Olympus ORF, Panasonic RW2. Some
+// systems give HEIC files no type, and RAW files get no type or a vendor one (image/x-adobe-dng,
+// image/x-canon-cr2, ...), so a file with no type, a generic one, or an image/x- one goes by its
+// extension. Types are compared in lower case: Windows reports a DNG as "image/DNG".
+const PHOTO_TYPES = ["image/jpeg", "image/png", "image/heic", "image/heif", "image/webp", "image/dng"];
+const PHOTO_EXTENSION = /\.(jpe?g|png|hei[cf]|webp|dng|cr2|nef|arw|pef|orf|rw2)$/i;
 
-export function isPhotoFile({ name, type }: { name: string; type: string }) {
+export function isPhotoFile({ name, type: rawType }: { name: string; type: string }) {
+  const type = rawType.toLowerCase();
   if (PHOTO_TYPES.includes(type)) return true;
-  return (type === "" || type === "application/octet-stream") && PHOTO_EXTENSION.test(name);
+  const untyped = type === "" || type === "application/octet-stream" || type.startsWith("image/x-");
+  return untyped && PHOTO_EXTENSION.test(name);
 }
 
 // Only these tags are read. reviveValues: false keeps the dates as the raw EXIF strings (exifr
@@ -32,18 +37,83 @@ const EXIF_OPTIONS = {
 
 // The photo's location and date, or null when it can't be read as a photo (exifr doesn't know
 // the format, or the file is damaged). exifr is loaded only now, when a photo is picked.
+// Only the metadata part of the file is read (an iPhone ProRAW DNG is 25–75 MB): exifr reads a
+// File by chunks (64 KB first, then only where the metadata points), and PNG and WebP are walked
+// chunk header by chunk header to their EXIF chunk.
 export async function readPhoto(file: Blob): Promise<PhotoInfo | null> {
-  const { default: exifr } = await import("exifr");
-  let bytes: Uint8Array | null = new Uint8Array(await file.arrayBuffer());
-  if (isWebp(bytes)) {
-    bytes = webpExif(bytes);
-    if (!bytes) return { location: null, taken: null };
-  }
+  const exifr = await loadExifr();
   try {
-    return photoInfo(await exifr.parse(bytes, EXIF_OPTIONS));
+    const head = new Uint8Array(await file.slice(0, 12).arrayBuffer());
+    const container = isPng(head) ? "png" : isWebp(head) ? "webp" : null;
+    if (!container) return photoInfo(await exifr.parse(file, EXIF_OPTIONS));
+    const exif = await exifChunk(file, container);
+    return exif ? photoInfo(await exifr.parse(exif, EXIF_OPTIONS)) : { location: null, taken: null };
   } catch {
     return null;
   }
+}
+
+// The photo's embedded EXIF thumbnail (a small JPEG that most cameras and phones write into a JPEG's
+// EXIF), read by chunks like readPhoto, or null: none, or a format exifr can't take one from
+// (HEIC, PNG, WebP, and DNG, whose preview isn't stored as an EXIF thumbnail).
+export async function readThumbnail(file: Blob): Promise<Uint8Array | null> {
+  const exifr = await loadExifr();
+  try {
+    const thumbnail = await exifr.thumbnail(file);
+    // A copy, so it has a buffer of its own (the worker transfers it to the page).
+    return thumbnail?.length ? new Uint8Array(thumbnail) : null;
+  } catch {
+    return null;
+  }
+}
+
+let exifrModule: Promise<typeof import("exifr").default> | null = null;
+
+// exifr, with the GPS fix below; loaded once (again after a failed load, e.g. offline).
+export function loadExifr() {
+  exifrModule ??= import("exifr").then(
+    ({ default: exifr }) => {
+      fixTiffGps(exifr.segmentParsers);
+      return exifr;
+    },
+    (error) => {
+      exifrModule = null;
+      throw error;
+    },
+  );
+  return exifrModule;
+}
+
+// exifr reads TIFF-based files (DNG, camera RAW) by chunks, and loads the part of the file under
+// IFD0 and the Exif block before parsing them, but not the part under the GPS block, which it then
+// misses without an error when it lies past what's been read (a Nikon NEF's sits about 160 KB in,
+// past the first 64 KB). This subclass of its TIFF parser loads that part first, the same way.
+type TiffParser = {
+  ifd0?: unknown;
+  gpsOffset?: number;
+  file: { tiff?: boolean; ensureChunk: (offset: number, length: number) => Promise<void> };
+  options: { chunkSize: number };
+  parseIfd0Block(): Promise<unknown>;
+  parseGpsBlock(): Promise<unknown>;
+};
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- a mixin's base needs any[] args
+type TiffParserClass = new (...args: any[]) => TiffParser;
+
+function fixTiffGps(segmentParsers: Map<string, TiffParserClass>) {
+  const Base = segmentParsers.get("tiff");
+  if (!Base) return;
+  segmentParsers.set(
+    "tiff",
+    class extends Base {
+      async parseGpsBlock() {
+        if (!this.ifd0) await this.parseIfd0Block();
+        if (this.gpsOffset !== undefined && this.file.tiff) {
+          await this.file.ensureChunk(this.gpsOffset, this.options.chunkSize);
+        }
+        return super.parseGpsBlock();
+      }
+    },
+  );
 }
 
 // exifr's output → what the add flow uses. Coordinates must be numbers in range; 0,0 is what some
@@ -102,21 +172,35 @@ export function formatTaken(taken: PhotoTaken) {
 const ascii = (bytes: Uint8Array, at: number, length: number) =>
   String.fromCharCode(...bytes.subarray(at, at + length));
 
-function isWebp(bytes: Uint8Array) {
-  return ascii(bytes, 0, 4) === "RIFF" && ascii(bytes, 8, 4) === "WEBP";
-}
+const isPng = (head: Uint8Array) => ascii(head, 0, 8) === "\x89PNG\r\n\x1a\n";
+const isWebp = (head: Uint8Array) => ascii(head, 0, 4) === "RIFF" && ascii(head, 8, 4) === "WEBP";
 
-// exifr doesn't read WebP. Its EXIF lives in a RIFF "EXIF" chunk as plain TIFF bytes (some
-// writers put "Exif\0\0" in front), which exifr does read. null when there's no such chunk.
-function webpExif(bytes: Uint8Array): Uint8Array | null {
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  for (let at = 12; at + 8 <= bytes.length; ) {
-    const size = view.getUint32(at + 4, true);
-    if (ascii(bytes, at, 4) === "EXIF") {
-      const data = bytes.subarray(at + 8, at + 8 + size);
+// Chunk headers are read through 64 KB windows of the file, so files with small chunks take few
+// reads and big chunks (the image data) are skipped without being read.
+const WINDOW = 65536;
+
+// The EXIF chunk's TIFF bytes (some writers put "Exif\0\0" in front), which exifr reads, or null
+// when there's none. exifr doesn't read WebP, and in PNG it only finds an eXIf chunk inside what
+// it has read, so one after the image data would be missed.
+// - PNG: an 8-byte signature, then chunks of [length, big-endian][type][data][CRC], up to IEND.
+// - WebP: "RIFF" [size] "WEBP", then chunks of [type][length, little-endian][data], each padded
+//   to an even size.
+async function exifChunk(file: Blob, container: "png" | "webp"): Promise<Uint8Array | null> {
+  const png = container === "png";
+  let window = { start: 0, bytes: new Uint8Array(0) };
+  for (let at = png ? 8 : 12; at + 8 <= file.size; ) {
+    if (at + 8 > window.start + window.bytes.length) {
+      window = { start: at, bytes: new Uint8Array(await file.slice(at, at + WINDOW).arrayBuffer()) };
+    }
+    const header = new DataView(window.bytes.buffer, at - window.start, 8);
+    const type = ascii(window.bytes, at - window.start + (png ? 4 : 0), 4);
+    const size = png ? header.getUint32(0) : header.getUint32(4, true);
+    if (type === (png ? "eXIf" : "EXIF")) {
+      const data = new Uint8Array(await file.slice(at + 8, at + 8 + size).arrayBuffer());
       return ascii(data, 0, 6) === "Exif\0\0" ? data.subarray(6) : data;
     }
-    at += 8 + size + (size % 2); // chunks are padded to an even size
+    if (type === "IEND") return null;
+    at += 8 + size + (png ? 4 : size % 2);
   }
   return null;
 }

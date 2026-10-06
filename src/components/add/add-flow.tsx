@@ -1,15 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { startTransition, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { useRouter } from "next/navigation";
 
 import { useAddVisit, useAddVisitBubble } from "@/components/add/add-visit-context";
-import { type AddMode, AddPanel, type PanelMessage, type TextMode } from "@/components/add/add-panel";
+import { type AddMode, AddPanel, isTextMode, type PanelMessage, type TextMode } from "@/components/add/add-panel";
 import { errorCopy, postJson } from "@/components/add/api";
 import { ConfirmCard, type Lookup } from "@/components/add/confirm-card";
 import { AddDrawer, ConfirmPanel } from "@/components/add/confirm-surfaces";
 import { RpgDialog } from "@/components/dialogs/rpg-dialog";
+import { TripReview, type TripReviewData } from "@/components/import/trip-review";
 import { type Drop, useMapCover, useOverworld } from "@/components/map/overworld";
 import { Button } from "@/components/ui/8bit/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/8bit/card";
@@ -18,13 +19,20 @@ import { useIsDesktop } from "@/components/use-is-desktop";
 import type { LatLng } from "@/lib/links/parse";
 import { formatTaken, isPhotoFile, type PhotoInfo, type PhotoTaken, photoVisited, readPhoto } from "@/lib/photo";
 import type { LinkResult, NearbyResult, ResolveResult } from "@/lib/resolve";
+import { IMPORT_MAX_STOPS } from "@/lib/rate-limits";
 import { saveToasts } from "@/lib/save-toasts";
+import { MAX_PHOTOS } from "@/lib/trip/config";
+import { randomUuid } from "@/lib/trip/group";
+import { readTripPhotos, type TripReading } from "@/lib/trip/read-client";
 import type { SavedVisit } from "@/lib/visits";
 
 import "./add.css";
 
 // SPEC §11.7.
 const UNREADABLE_PHOTO = "That file isn't a photo we can read.";
+const TOO_MANY_PHOTOS = `That's more than ${MAX_PHOTOS} photos. Import your trip in smaller batches.`;
+const TOO_MANY_STOPS = `That's more than ${IMPORT_MAX_STOPS} stops. Import your trip in smaller batches.`;
+const NO_USABLE_PHOTO = "None of these photos have a location and date.";
 
 // Placing a dropped pin (SPEC §11.4): where it is so far, where it started (a photo's
 // coordinates, which the map flies to), and the photo's date to carry into its card.
@@ -58,6 +66,11 @@ export function AddFlow() {
   const [message, setMessage] = useState<PanelMessage | null>(null);
   // The date of a photo without GPS, carried into Type Location (SPEC §11.2 step 3).
   const [photoTaken, setPhotoTaken] = useState<PhotoTaken | null>(null);
+  // Trip Photos (SPEC §11.8): the reading worker while it runs, its progress, and the review of
+  // the stops it found.
+  const tripReading = useRef<TripReading | null>(null);
+  const [tripProgress, setTripProgress] = useState<{ done: number; total: number } | null>(null);
+  const [review, setReview] = useState<TripReviewData | null>(null);
   const [lookup, setLookup] = useState<Lookup | null>(null);
   const [placing, setPlacing] = useState<Placing | null>(null);
   const [confirmingPin, setConfirmingPin] = useState(false);
@@ -72,11 +85,14 @@ export function AddFlow() {
 
   const resetPanel = useCallback(() => {
     requests.current += 1;
+    tripReading.current?.cancel();
+    tripReading.current = null;
     setMode(null);
     setInputs({ link: "", text: "" });
     setLoading(false);
     setMessage(null);
     setPhotoTaken(null);
+    setTripProgress(null);
   }, []);
 
   function reset() {
@@ -146,7 +162,7 @@ export function AddFlow() {
   }
 
   async function find() {
-    if (!mode || mode === "photo" || loading) return;
+    if (!isTextMode(mode) || loading) return;
     const input = inputs[mode].trim();
     if (!input) return;
     const request = ++requests.current;
@@ -241,6 +257,42 @@ export function AddFlow() {
     }
   }
 
+  // Trip Photos (SPEC §11.8 steps 1–4): the reading worker reads the picked photos (at most 500)
+  // and groups them into stops; then the review opens in place of the bubble or drawer. Closing
+  // the panel stops the worker (resetPanel).
+  async function findTrip(files: File[]) {
+    if (loading) return;
+    const request = ++requests.current;
+    setMessage(null);
+    if (files.length > MAX_PHOTOS) return setMessage({ kind: "error", text: TOO_MANY_PHOTOS });
+    setLoading(true);
+    setTripProgress({ done: 0, total: files.length });
+    const reading = readTripPhotos(files, (done, total) => {
+      if (request === requests.current) setTripProgress({ done, total });
+    });
+    tripReading.current = reading;
+    try {
+      const { plan, thumbnails } = await reading.result;
+      if (request !== requests.current) return;
+      if (plan.kind === "stops") {
+        // A transition, so React yields while rendering the review (SPEC §20's 100 ms).
+        startTransition(() => setReview({ id: randomUuid(), stops: plan.stops, skipped: plan.skipped, thumbnails }));
+        close();
+      } else {
+        const text = plan.kind === "too_many_stops" ? TOO_MANY_STOPS : plan.kind === "no_usable" ? NO_USABLE_PHOTO : TOO_MANY_PHOTOS;
+        setMessage({ kind: "error", text });
+      }
+    } catch (error) {
+      // The worker or the photo reader's code didn't load (offline).
+      console.error("Reading the trip's photos failed:", error);
+      if (request !== requests.current) return;
+      setMessage({ kind: "error", text: errorCopy("upstream_error") });
+    }
+    tripReading.current = null;
+    setLoading(false);
+    setTripProgress(null);
+  }
+
   // "Can't find it? Drop a pin": the bubble or drawer gets out of the way of the map. From a
   // photo, the pin starts at its coordinates (if it had any) and the card gets its date.
   function startPlacing(start: LatLng | null, taken: PhotoTaken | null) {
@@ -296,18 +348,20 @@ export function AddFlow() {
   const panelProps = {
     mode,
     onMode: pickMode,
-    value: mode && mode !== "photo" ? inputs[mode] : "",
+    value: isTextMode(mode) ? inputs[mode] : "",
     onValue: (value: string) => {
-      if (mode && mode !== "photo") setInputs((current) => ({ ...current, [mode]: value }));
+      if (isTextMode(mode)) setInputs((current) => ({ ...current, [mode]: value }));
       // Typing clears an error; the no-location warning stays while the user types the place.
       setMessage((current) => (current?.kind === "error" ? null : current));
     },
     onFind: find,
     onPhoto: findPhoto,
+    onPhotos: findTrip,
     onDropPin: () => startPlacing(null, mode === "text" ? photoTaken : null),
     loading,
     message,
     photoDate: mode === "text" && photoTaken ? formatTaken(photoTaken) : null,
+    tripProgress,
   };
 
   const card = lookup && (
@@ -385,6 +439,8 @@ export function AddFlow() {
       >
         {card || <AddPanel layout="grid" {...panelProps} inputRef={drawerInput} />}
       </AddDrawer>
+
+      {review && <TripReview review={review} onClose={() => setReview(null)} />}
 
       <RpgDialog
         open={unreadable !== null}

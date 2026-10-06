@@ -4,6 +4,7 @@ import { useId, useRef, useState } from "react";
 
 import { ArrowLeft } from "pixelarticons/react/ArrowLeft";
 import { Image as ImageIcon } from "pixelarticons/react/Image";
+import { Images } from "pixelarticons/react/Images";
 import { Link as LinkIcon } from "pixelarticons/react/Link";
 import { MapPin } from "pixelarticons/react/MapPin";
 import { Pencil } from "pixelarticons/react/Pencil";
@@ -13,10 +14,13 @@ import { Alert, AlertDescription } from "@/components/ui/8bit/alert";
 import { Button } from "@/components/ui/8bit/button";
 import { Input } from "@/components/ui/8bit/input";
 import { Label } from "@/components/ui/8bit/label";
+import { TRIP_PHOTOS_ENABLED } from "@/lib/trip/config";
 import { cn } from "@/lib/utils";
 
-export type AddMode = "link" | "text" | "photo";
-export type TextMode = Exclude<AddMode, "photo">;
+export type AddMode = "link" | "text" | "photo" | "trip";
+export type TextMode = "link" | "text";
+
+export const isTextMode = (mode: AddMode | null): mode is TextMode => mode === "link" || mode === "text";
 
 // What shows under the mode's input: an error (with "Drop a pin" for no results, SPEC §11.7),
 // or the warning for a photo without GPS, which switched to Type Location (SPEC §11.2 step 3).
@@ -37,19 +41,23 @@ const FIELDS = {
   },
 } as const;
 
+// Trip Photos only in development builds until it's finished (lib/trip/config).
 const MODES = [
   { mode: "link", label: "Paste Link", Icon: LinkIcon },
   { mode: "photo", label: "Upload Photo", Icon: ImageIcon },
   { mode: "text", label: "Type Location", Icon: Pencil },
+  ...(TRIP_PHOTOS_ENABLED ? [{ mode: "trip", label: "Trip Photos", Icon: Images } as const] : []),
 ] as const;
 
-// The add panel's content (SPEC §11): three mode buttons and the chosen mode's input, then
+// The add panel's content (SPEC §11): the mode buttons and the chosen mode's input, then
 // "Can't find it? Drop a pin" (SPEC §11.4). Two layouts, with the same state:
-// - "grid" (the mobile drawer): the modes side by side, the chosen one's input below them.
+// - "grid" (the mobile drawer): the modes in a grid (three across, or 2×2 with four, since four
+//   don't fit across 375px, SPEC §14.2), the chosen one's input below them.
 // - "list" (the desktop speech bubble): the modes as a vertical menu with the RPG cursor (▶) on
 //   the hovered or focused one; choosing one swaps the menu for its input, with a way back.
-//   Upload Photo also takes a dropped file there.
+//   Upload Photo and Trip Photos also take dropped files there.
 // photoDate: the date of a photo without GPS, carried into Type Location.
+// tripProgress: photos read so far while Trip Photos reads them.
 export function AddPanel({
   layout,
   mode,
@@ -58,10 +66,12 @@ export function AddPanel({
   onValue,
   onFind,
   onPhoto,
+  onPhotos,
   onDropPin,
   loading,
   message,
   photoDate,
+  tripProgress,
   inputRef,
 }: {
   layout: "grid" | "list";
@@ -71,14 +81,16 @@ export function AddPanel({
   onValue: (value: string) => void;
   onFind: () => void;
   onPhoto: (file: File) => void;
+  onPhotos: (files: File[]) => void;
   onDropPin: () => void;
   loading: boolean;
   message: PanelMessage | null;
   photoDate: string | null;
+  tripProgress: { done: number; total: number } | null;
   inputRef?: React.Ref<HTMLInputElement>;
 }) {
   const inputId = useId();
-  const field = mode && mode !== "photo" && FIELDS[mode];
+  const field = isTextMode(mode) && FIELDS[mode];
   const list = layout === "list";
   const dropPinInMessage = message?.kind === "error" && message.dropPin;
 
@@ -111,7 +123,11 @@ export function AddPanel({
           </ul>
         )
       ) : (
-        <div role="group" aria-label="How to add" className="grid grid-cols-3 gap-button-group px-1.5">
+        <div
+          role="group"
+          aria-label="How to add"
+          className={cn("grid gap-button-group px-1.5", MODES.length === 4 ? "grid-cols-2" : "grid-cols-3")}
+        >
           {MODES.map(({ mode: option, label, Icon }) => (
             <ModeButton key={option} pressed={mode === option} disabled={loading} onClick={() => onMode(option)}>
               <Icon aria-hidden="true" className="size-6 shrink-0" />
@@ -159,9 +175,21 @@ export function AddPanel({
               {mode === "text" && photoDate && <p className="text-tiny">Date from the photo: {photoDate}</p>}
             </form>
           ) : (
-            <PhotoPicker dropZone={list} onPhoto={onPhoto} disabled={loading} />
+            <PhotoPicker
+              dropZone={list}
+              multiple={mode === "trip"}
+              onFiles={mode === "trip" ? onPhotos : (files) => onPhoto(files[0])}
+              disabled={loading}
+            />
           )}
-          {loading && <Loading className="mt-2" />}
+          {loading &&
+            (tripProgress ? (
+              <p role="status" className="mt-2">
+                Reading photos {tripProgress.done}/{tripProgress.total}
+              </p>
+            ) : (
+              <Loading className="mt-2" />
+            ))}
           {message?.kind === "error" && (
             <Alert variant="error" className="mt-2">
               <AlertDescription>
@@ -228,21 +256,27 @@ export function DropPinLink({
 // Upload Photo (SPEC §11.2 step 1): one image from the device's normal picker. image/* opens the
 // photo library on phones; the type is checked once a file is picked. In the desktop bubble the
 // box also takes a dropped file. The photo is read in the browser and never uploaded.
+// Trip Photos (`multiple`, SPEC §11.8 step 1): the same, with many photos at once.
 function PhotoPicker({
   dropZone,
-  onPhoto,
+  multiple,
+  onFiles,
   disabled,
 }: {
   dropZone: boolean;
-  onPhoto: (file: File) => void;
+  multiple: boolean;
+  onFiles: (files: File[]) => void;
   disabled: boolean;
 }) {
   const fileInput = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);
 
+  // On a task of its own: for hundreds of files, the pick is already a long task for the
+  // browser (building the FileList), so nothing of ours is added to it.
   function take(files: FileList | null) {
-    const file = files?.[0];
-    if (file && !disabled) onPhoto(file);
+    if (!files?.length || disabled) return;
+    const picked = Array.from(files);
+    setTimeout(() => onFiles(picked));
   }
 
   const dropHandlers = dropZone && {
@@ -271,7 +305,7 @@ function PhotoPicker({
         dropZone ? "items-center border-4 border-dashed border-text p-4 text-center data-over:bg-accent" : "px-1.5",
       )}
     >
-      {dropZone && <p>Drop a photo here, or</p>}
+      {dropZone && <p>{multiple ? "Drop photos here, or" : "Drop a photo here, or"}</p>}
       <Button
         type="button"
         autoFocus
@@ -279,7 +313,7 @@ function PhotoPicker({
         onClick={() => fileInput.current?.click()}
         className={cn("mx-1.5", !dropZone && "self-start")}
       >
-        Choose photo
+        {multiple ? "Choose photos" : "Choose photo"}
       </Button>
       {/* Visually hidden rather than display: none, which some mobile browsers won't open a
           picker for. Reset after each pick, so picking the same file again still works. */}
@@ -287,6 +321,7 @@ function PhotoPicker({
         ref={fileInput}
         type="file"
         accept="image/*"
+        multiple={multiple}
         tabIndex={-1}
         aria-hidden="true"
         className="sr-only"
@@ -295,7 +330,11 @@ function PhotoPicker({
           event.target.value = "";
         }}
       />
-      <p className="text-tiny">The photo stays on your device. Only its location and date are used.</p>
+      <p className="text-tiny">
+        {multiple
+          ? "The photos stay on your device. Only their locations and dates are used."
+          : "The photo stays on your device. Only its location and date are used."}
+      </p>
     </div>
   );
 }

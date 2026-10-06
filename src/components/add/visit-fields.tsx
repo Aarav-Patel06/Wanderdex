@@ -158,30 +158,48 @@ export function WhenField({
 }
 
 // The 14 categories (SPEC §12.5) as a dropdown with their sprites.
+// lazy: the list renders only while it's open, and the trigger shows the value itself. A closed
+// Radix Select still renders every item (to show the chosen one's text), which across the Trip
+// Photos review's stops (up to 150) is most of a second of main-thread work as it opens.
 export function CategorySelect({
   id,
   value,
   onChange,
   disabled,
+  lazy = false,
 }: {
   id: string;
   value: Category;
   onChange: (category: Category) => void;
   disabled: boolean;
+  lazy?: boolean;
 }) {
+  const [open, setOpen] = useState(false);
+  const option = (category: Category) => (
+    <>
+      <Image src={categorySprite(category)} alt="" width={32} height={32} unoptimized className="pixelated" />
+      {CATEGORY_LABELS[category]}
+    </>
+  );
   return (
-    <Select value={value} onValueChange={(next) => onChange(next as Category)} disabled={disabled}>
+    <Select
+      value={value}
+      onValueChange={(next) => onChange(next as Category)}
+      disabled={disabled}
+      {...(lazy && { open, onOpenChange: setOpen })}
+    >
       <SelectTrigger id={id} className="w-full">
-        <SelectValue />
+        <SelectValue>{lazy ? option(value) : undefined}</SelectValue>
       </SelectTrigger>
-      <SelectContent>
-        {CATEGORIES.map((option) => (
-          <SelectItem key={option} value={option}>
-            <Image src={categorySprite(option)} alt="" width={32} height={32} unoptimized className="pixelated" />
-            {CATEGORY_LABELS[option]}
-          </SelectItem>
-        ))}
-      </SelectContent>
+      {(!lazy || open) && (
+        <SelectContent>
+          {CATEGORIES.map((category) => (
+            <SelectItem key={category} value={category}>
+              {option(category)}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      )}
     </Select>
   );
 }

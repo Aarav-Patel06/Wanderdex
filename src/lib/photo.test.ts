@@ -1,122 +1,9 @@
+import "@/test/file-reader";
+
 import { describe, expect, it } from "vitest";
 
-import { formatTaken, isPhotoFile, photoInfo, photoVisited, readPhoto } from "@/lib/photo";
-
-// Real EXIF bytes, so exifr itself runs: a little-endian TIFF with an Exif IFD (DateTimeOriginal,
-// OffsetTimeOriginal) and a GPS IFD, wrapped as a JPEG APP1 segment, a PNG eXIf chunk, or a WebP
-// EXIF chunk. No image data: exifr only reads the metadata.
-const ASCII = 2;
-const LONG = 4;
-const RATIONAL = 5;
-
-type Entry = [tag: number, type: number, value: string | number | [number, number][]];
-type Dms = [number, number][];
-
-function tiff({
-  dateTime,
-  offset,
-  gps,
-}: {
-  dateTime?: string;
-  offset?: string;
-  gps?: { latRef: string; lat: Dms; lngRef: string; lng: Dms };
-}) {
-  const exif: Entry[] = [];
-  if (dateTime) exif.push([0x9003, ASCII, `${dateTime}\0`]);
-  if (offset) exif.push([0x9011, ASCII, `${offset}\0`]);
-  const gpsEntries: Entry[] = gps
-    ? [
-        [1, ASCII, `${gps.latRef}\0`],
-        [2, RATIONAL, gps.lat],
-        [3, ASCII, `${gps.lngRef}\0`],
-        [4, RATIONAL, gps.lng],
-      ]
-    : [];
-  const ifdSize = (count: number) => 2 + count * 12 + 4;
-  const pointers = Number(exif.length > 0) + Number(gpsEntries.length > 0);
-  const ifd0At = 8;
-  const exifAt = ifd0At + ifdSize(pointers);
-  const gpsAt = exifAt + (exif.length ? ifdSize(exif.length) : 0);
-  let dataAt = gpsAt + (gpsEntries.length ? ifdSize(gpsEntries.length) : 0);
-
-  const bytes = new Uint8Array(dataAt + 256);
-  const view = new DataView(bytes.buffer);
-  bytes.set([0x49, 0x49]);
-  view.setUint16(2, 42, true);
-  view.setUint32(4, ifd0At, true);
-
-  function writeIfd(at: number, entries: Entry[]) {
-    view.setUint16(at, entries.length, true);
-    entries.forEach(([tag, type, value], i) => {
-      const entry = at + 2 + i * 12;
-      view.setUint16(entry, tag, true);
-      view.setUint16(entry + 2, type, true);
-      if (typeof value === "number") {
-        view.setUint32(entry + 4, 1, true);
-        view.setUint32(entry + 8, value, true);
-      } else if (typeof value === "string") {
-        view.setUint32(entry + 4, value.length, true);
-        const target = value.length <= 4 ? entry + 8 : dataAt;
-        bytes.set(Buffer.from(value, "latin1"), target);
-        if (value.length > 4) {
-          view.setUint32(entry + 8, dataAt, true);
-          dataAt += value.length + (value.length % 2);
-        }
-      } else {
-        view.setUint32(entry + 4, value.length, true);
-        view.setUint32(entry + 8, dataAt, true);
-        for (const [numerator, denominator] of value) {
-          view.setUint32(dataAt, numerator, true);
-          view.setUint32(dataAt + 4, denominator, true);
-          dataAt += 8;
-        }
-      }
-    });
-    view.setUint32(at + 2 + entries.length * 12, 0, true);
-  }
-
-  const ifd0: Entry[] = [];
-  if (exif.length) ifd0.push([0x8769, LONG, exifAt]);
-  if (gpsEntries.length) ifd0.push([0x8825, LONG, gpsAt]);
-  writeIfd(ifd0At, ifd0);
-  if (exif.length) writeIfd(exifAt, exif);
-  if (gpsEntries.length) writeIfd(gpsAt, gpsEntries);
-  return bytes.slice(0, dataAt);
-}
-
-const concat = (...parts: (Uint8Array | number[] | string)[]) =>
-  new Uint8Array(parts.flatMap((part) => [...(typeof part === "string" ? Buffer.from(part, "latin1") : part)]));
-
-const u16be = (n: number) => [n >> 8, n & 255];
-const u32be = (n: number) => [n >>> 24, (n >> 16) & 255, (n >> 8) & 255, n & 255];
-const u32le = (n: number) => [n & 255, (n >> 8) & 255, (n >> 16) & 255, n >>> 24];
-
-function jpeg(exif?: Uint8Array) {
-  const app1 = exif ? concat([0xff, 0xe1], u16be(2 + 6 + exif.length), "Exif\0\0", exif) : [];
-  return new Blob([concat([0xff, 0xd8], app1, [0xff, 0xd9])]);
-}
-
-function png(exif: Uint8Array) {
-  const chunk = (type: string, data: Uint8Array | number[]) => concat(u32be(data.length), type, data, [0, 0, 0, 0]);
-  const ihdr = concat(u32be(1), u32be(1), [8, 2, 0, 0, 0]);
-  return new Blob([concat([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], chunk("IHDR", ihdr), chunk("eXIf", exif), chunk("IEND", []))]);
-}
-
-function webp(exif: Uint8Array | null, exifHeader = false) {
-  const chunk = (type: string, data: Uint8Array) => concat(type, u32le(data.length), data, data.length % 2 ? [0] : []);
-  const vp8x = chunk("VP8X", new Uint8Array(10));
-  const body = concat("WEBP", vp8x, exif ? chunk("EXIF", exifHeader ? concat("Exif\0\0", exif) : exif) : []);
-  return new Blob([concat("RIFF", u32le(body.length), body)]);
-}
-
-// Shibuya crossing: 35°39'29.58" N, 139°42'0.6" E.
-const TOKYO_GPS = {
-  latRef: "N",
-  lat: [[35, 1], [39, 1], [2958, 100]] as Dms,
-  lngRef: "E",
-  lng: [[139, 1], [42, 1], [60, 100]] as Dms,
-};
-const TOKYO = { lat: 35 + 39 / 60 + 29.58 / 3600, lng: 139 + 42 / 60 + 0.6 / 3600 };
+import { formatTaken, isPhotoFile, photoInfo, photoVisited, readPhoto, readThumbnail } from "@/lib/photo";
+import { CountingBlob, farGpsTiff, jpeg, png, raw, tiff, TOKYO, TOKYO_GPS, webp } from "@/test/exif";
 
 describe("readPhoto", () => {
   it("reads GPS, the date, and its offset", async () => {
@@ -254,5 +141,109 @@ describe("isPhotoFile", () => {
     expect(isPhotoFile({ name: "clip.mov", type: "video/quicktime" })).toBe(false);
     // The extension only counts without a real type.
     expect(isPhotoFile({ name: "fake.jpg", type: "text/plain" })).toBe(false);
+    expect(isPhotoFile({ name: "fake.dng", type: "text/plain" })).toBe(false);
+  });
+
+  it("accepts DNG (iPhone ProRAW) by type, in any case, and by extension", () => {
+    // Windows reports "image/DNG"; others "image/dng", "image/x-adobe-dng", or nothing.
+    for (const type of ["image/DNG", "image/dng", "image/x-adobe-dng", "", "application/octet-stream"]) {
+      expect(isPhotoFile({ name: "IMG_0001.DNG", type })).toBe(true);
+    }
+    expect(isPhotoFile({ name: "IMG_0001.JPG", type: "IMAGE/JPEG" })).toBe(true);
+  });
+
+  it("accepts the TIFF-based camera RAW formats by extension, with no type or a vendor one", () => {
+    for (const [name, type] of [
+      ["5G4A9394.CR2", "image/x-canon-cr2"],
+      ["DSC_0001.NEF", "image/x-nikon-nef"],
+      ["DSC00001.ARW", ""],
+      ["IMGP8550.PEF", "image/x-pentax-pef"],
+      ["P1000475.RW2", "application/octet-stream"],
+      ["sc000877.orf", "image/x-olympus-orf"],
+    ]) {
+      expect(isPhotoFile({ name, type })).toBe(true);
+    }
+  });
+
+  it("rejects RAW formats exifr can't read (they aren't TIFF-based)", () => {
+    expect(isPhotoFile({ name: "IMG_6310.CR3", type: "" })).toBe(false);
+    expect(isPhotoFile({ name: "DSCF0001.RAF", type: "image/x-fuji-raf" })).toBe(false);
+  });
+});
+
+describe("RAW photos", () => {
+  const dngTiff = tiff({ dateTime: "2025:03:12 15:45:30", offset: "+09:00", gps: TOKYO_GPS });
+
+  it("reads a DNG's GPS and date, reading only its start (a ProRAW file is 25–75 MB)", async () => {
+    const file = new CountingBlob([raw(dngTiff, 30_000_000)]);
+    const info = await readPhoto(file);
+    expect(info?.location?.lat).toBeCloseTo(TOKYO.lat, 9);
+    expect(info?.location?.lng).toBeCloseTo(TOKYO.lng, 9);
+    expect(info?.taken).toEqual({ local: "2025-03-12T15:45:30", offset: "+09:00" });
+    expect(file.wholeReads).toBe(0);
+    expect(file.sliced).toBeLessThanOrEqual(160 * 1024);
+  });
+
+  it("finds a GPS block that lies past the first chunk (exifr alone misses it)", async () => {
+    for (const gpsAt of [70_028, 161_086, 2_000_000]) {
+      const file = new CountingBlob([farGpsTiff(gpsAt, 3_000_000)]);
+      const info = await readPhoto(file);
+      expect(info?.location?.lat).toBeCloseTo(35 + 39 / 60 + 29.58 / 3600, 9);
+      expect(info?.taken?.local).toBe("2025-03-12T15:45:30");
+      expect(file.sliced).toBeLessThan(300 * 1024);
+    }
+  });
+});
+
+describe("partial reads", () => {
+  const exif = tiff({ dateTime: "2025:03:12 15:45:30", gps: TOKYO_GPS });
+
+  it("reads only a large JPEG's first chunk", async () => {
+    const file = new CountingBlob([jpeg(exif), new Uint8Array(20_000_000)]);
+    expect((await readPhoto(file))?.location?.lat).toBeCloseTo(TOKYO.lat, 9);
+    expect(file.wholeReads).toBe(0);
+    expect(file.sliced).toBeLessThanOrEqual(65_536 + 12);
+  });
+
+  it("skips a PNG's or WebP's image data to reach an EXIF chunk after it", async () => {
+    for (const file of [
+      new CountingBlob([png(exif, { imageData: [8_000_000] })]),
+      new CountingBlob([webp(exif, false, { imageData: [8_000_000] })]),
+    ]) {
+      expect((await readPhoto(file))?.location?.lat).toBeCloseTo(TOKYO.lat, 9);
+      expect(file.wholeReads).toBe(0);
+      expect(file.sliced).toBeLessThan(200 * 1024);
+    }
+  });
+
+  it("walks many small chunks without reading the whole file at once", async () => {
+    const file = new CountingBlob([png(exif, { imageData: Array(300).fill(8192) })]);
+    expect((await readPhoto(file))?.location?.lat).toBeCloseTo(TOKYO.lat, 9);
+    expect(file.wholeReads).toBe(0);
+  });
+
+  it("gives up on a PNG whose eXIf chunk is empty", async () => {
+    const file = new CountingBlob([png(new Uint8Array(0), { imageData: [100_000] })]);
+    expect(await readPhoto(file)).toBeNull();
+  });
+});
+
+describe("readThumbnail", () => {
+  // Stand-in JPEG bytes: exifr hands back whatever the EXIF thumbnail tags point at.
+  const thumb = new Uint8Array([0xff, 0xd8, 1, 2, 3, 4, 5, 6, 7, 8, 0xff, 0xd9]);
+
+  it("returns a JPEG's embedded EXIF thumbnail, reading only its first chunk", async () => {
+    const file = new CountingBlob([jpeg(tiff({ dateTime: "2025:03:12 15:45:30", thumbnail: thumb })), new Uint8Array(10_000_000)]);
+    expect(await readThumbnail(file)).toEqual(thumb);
+    expect(file.wholeReads).toBe(0);
+    expect(file.sliced).toBeLessThanOrEqual(65_536);
+  });
+
+  it("is null without one: no thumbnail, a DNG, a PNG, or not a photo", async () => {
+    expect(await readThumbnail(jpeg(tiff({ dateTime: "2025:03:12 15:45:30" })))).toBeNull();
+    expect(await readThumbnail(jpeg())).toBeNull();
+    expect(await readThumbnail(raw(tiff({ gps: TOKYO_GPS }), 1_000_000))).toBeNull();
+    expect(await readThumbnail(png(tiff({ gps: TOKYO_GPS })))).toBeNull();
+    expect(await readThumbnail(new Blob(["hello"]))).toBeNull();
   });
 });

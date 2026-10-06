@@ -6,6 +6,10 @@ import type { GoogleSku } from "@/lib/google/places";
 export const LOOKUPS_PER_HOUR = 60;
 export const LOOKUPS_PER_DAY = 300;
 
+// Trip Photos (SPEC §11.8, §17): at most this many stops per import; more asks the user to split
+// the trip, and nothing is looked up.
+export const IMPORT_MAX_STOPS = 150;
+
 // Google Places calls per SKU across all users, per calendar month (UTC). Google's free allowance
 // is 5,000 a month for each of these Pro SKUs; the margin covers simultaneous requests that both
 // pass the check just below a cap.

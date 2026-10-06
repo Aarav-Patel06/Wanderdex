@@ -10,7 +10,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "bench:import": "vitest run --config vitest.bench.config.mts --silent=false"
   },
   "dependencies": {
     "@photostructure/tz-lookup": "^11.7.0",
