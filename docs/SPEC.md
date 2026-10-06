@@ -1,7 +1,7 @@
 # Wanderdex: Project Specification
 
-**Version:** 1.0 (2026-09-28)
-**Status:** Pre-build. Core build (Phases 1–3) is in scope; everything in §21 "Later" is out of scope.
+**Version:** 1.1 (2026-10-05)
+**Status:** Core build (Phases 1–3) done and live at `wanderdex.vercel.app`. Everything in §21 "Later" is out of scope.
 **Owner:** Aarav Patel. Personal student / portfolio project.
 
 ---
@@ -77,7 +77,7 @@ Storing Google Places data (names, coordinates, addresses, types) in our own dat
 | Build method | Claude Code builds; a separate Claude chat handles design decisions and reviews |
 | Package manager | pnpm |
 | Repo | Public GitHub repo `wanderdex`, no secrets committed |
-| Hosting | Vercel free tier, `wanderdex.vercel.app` (or closest available) |
+| Hosting | Vercel free tier, `wanderdex.vercel.app` |
 | Supabase keep-alive | GitHub Actions scheduled ping every ~3 days |
 | Google key | Budget alert on day one; daily request caps once billing is upgraded from the Free Trial (see §17) |
 
@@ -121,10 +121,11 @@ Other free resources the owner may use: **Lospec** (palettes), **itch.io** free 
 Browser (Next.js client)
  ├─ Overworld map: MapLibre (pixelated canvas) + HTML pin markers
  ├─ Add panel: Paste Link | Upload Photo (exifr, local only) | Type Location
- └─ Supabase client (reads/writes the user's own data under RLS)
+ └─ No direct Supabase access: pages read on the server, changes go through the routes below
         │
         ▼
 Next.js server (Vercel)
+ ├─ Pages + Server Functions → read the user's data with their session (RLS); login, signup, logout
  ├─ /api/resolve/link    → expand link, parse, Google Text Search
  ├─ /api/resolve/text    → Gemini parse, Google Text Search
  ├─ /api/resolve/nearby  → Google Nearby Search (photo GPS / manual pin)
@@ -141,7 +142,7 @@ Map tiles: browser → OpenFreeMap directly (no key)
 Country shapes: served as a static file from /public/geo/
 ```
 
-Rule: **all secret keys stay on the server.** The browser only ever sees the Supabase URL and the publishable key.
+Rule: **all secret keys stay on the server.** The browser never talks to Supabase directly: the session lives in cookies, and the server uses it with the Supabase URL and publishable key.
 
 ---
 
@@ -170,7 +171,7 @@ wanderdex/
 │  │  ├─ add/             # add panel, modes, confirmation card
 │  │  └─ dialogs/         # RPG dialog wrapper
 │  ├─ lib/
-│  │  ├─ supabase/        # server + browser clients
+│  │  ├─ supabase/        # server (session) + admin (secret key) clients
 │  │  ├─ google/          # Places API calls, field masks
 │  │  ├─ ai/              # Gemini parse + schema
 │  │  ├─ links/           # link parsing (unit tested)
@@ -507,7 +508,7 @@ Display labels: "Food", "Cafe", "Bar", "Museum", "Landmark", "Park & Nature", "S
 
 ### 13.4 Pins (important implementation detail)
 - **Pins must be HTML markers, not MapLibre symbol layers.** Everything drawn inside the map canvas gets pixelated by the low `pixelRatio`, which would destroy the 32×32 sprites. HTML markers sit above the canvas and stay crisp.
-- Cluster with **supercluster** over the user's places; recompute on `moveend`/`zoomend`; render only markers within the current viewport. The cluster radius grows with the pins: 40px below zoom 10, 80px from zoom 10 (supercluster is asked for one zoom lower), so nearby pins merge into a cluster instead of piling up.
+- Cluster with **supercluster** over the user's places; recompute on `moveend` (zooming fires it too); render only markers within the current viewport. The cluster radius grows with the pins: 40px below zoom 10, 80px from zoom 10 (supercluster is asked for one zoom lower), so nearby pins merge into a cluster instead of piling up.
 - **Single place:** the category sprite with `image-rendering: pixelated`, anchored at the pin's bottom tip, growing with zoom so pins read well up close: **32px** below zoom 10, **64px** from zoom 10, **96px** from zoom 15. The selected pin is one step up: **64px**, **96px**, or **128px**. Whole multiples only (§16.5 rule 4). Sizes change when a movement ends, never mid-pinch. Every pin's tap target is at least 44px.
 - **Cluster:** `pin_group.png` at the same size as single pins (32, 64, or 96px by zoom; it has no selected size) with a small dark badge on its top-right corner showing the count in the pixel font (cream text on `#2D201C`), capped at "99+". The count is 8px on 32px pins and 16px from zoom 10, and the badge grows with it. The sprite's white circle is too small for a number. Tapping a cluster zooms in to expand it.
 - **One pin per place**, even with several visits.
@@ -737,7 +738,7 @@ Toasts auto-dismiss after ~4 s and have a close (×) button. Copy is in §11.6 a
 ## 18. Operations
 - **Hosting:** Vercel, connected to the GitHub repo. `main` deploys to production; pull requests get preview deployments.
 - **Supabase keep-alive:** free projects pause after 7 days of inactivity. `.github/workflows/keepalive.yml` runs on a cron (e.g. `0 12 */3 * *`) and calls `GET /api/health` with the `HEALTH_PING_TOKEN` header; the endpoint runs a trivial database query.
-- **Migrations:** SQL files in `supabase/migrations/`, applied with the Supabase CLI or the SQL editor.
+- **Migrations:** SQL files in `supabase/migrations/`, applied by hand in the Supabase SQL Editor, in file-name order (README).
 - **Attribution:** map data credit visible on the Overworld.
 
 ---
@@ -763,7 +764,7 @@ Toasts auto-dismiss after ~4 s and have a close (×) button. Copy is in §11.6 a
 
 The owner is in a rush. Target roughly **two weeks** for the core build; these are targets, not deadlines.
 
-### Phase 1: Foundation (≈ days 1–5)
+### Phase 1: Foundation (≈ days 1–5): done
 - Accounts: Supabase project; Google Cloud (Places API (New), key restriction, budget alert, quota caps); Gemini API key; Vercel; GitHub repo.
 - Scaffold Next.js + TypeScript + Tailwind + shadcn/ui + 8bitcn; fonts; tokens (§16.2); sprites in `public/sprites/`; favicon.
 - Supabase: migrations (§8), RLS (§9), auth settings (§10).
@@ -774,7 +775,7 @@ The owner is in a rush. Target roughly **two weeks** for the core build; these a
 - `/api/health` + keep-alive workflow. Deploy to Vercel.
 - **Done when:** a user can sign up, add a place by link and by text, and see it in the list and as a crisp pin on the pixelated map, on phone and desktop, in production.
 
-### Phase 2: Full features (≈ days 6–10)
+### Phase 2: Full features (≈ days 6–10): done
 - Upload Photo mode (exifr), including the "no location data" path.
 - Ratings, notes, partial dates + precision, time zones.
 - Place detail page; edit and delete visits (RPG dialogs); per-user category edit.
@@ -785,7 +786,7 @@ The owner is in a rush. Target roughly **two weeks** for the core build; these a
 - Per-user rate limiting and the global monthly Google caps (§17).
 - **Done when:** every feature in §3 works end to end and the unit tests in §19 pass.
 
-### Phase 3: Polish (≈ days 11–14)
+### Phase 3: Polish (≈ days 11–14): done (2026-10-05)
 - Mobile drawer and bottom tab bar finalized; desktop sidebar finalized.
 - Every component passes the checklist (§16.5); contrast rules (§16.3) applied.
 - Empty and error states (§11.7).
@@ -833,4 +834,4 @@ Passport stamps · stats page · timeline replay · saving photos to entries · 
 ---
 
 ## 24. Open items
-- Final Vercel subdomain (`wanderdex.vercel.app` if available).
+None. (Resolved: the Vercel subdomain is `wanderdex.vercel.app`.)

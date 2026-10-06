@@ -4,13 +4,12 @@ import {
   categoriesFromChips,
   citiesIn,
   filterOptions,
-  filtersFromSearchParams,
   filtersSearch,
   hasFilters,
   NO_FILTERS,
-  visitFiltersSchema,
   withCountry,
 } from "@/lib/visit-filters";
+import { filtersFromSearchParams, visitFiltersSchema } from "@/lib/visit-filters-schema";
 
 describe("filtersFromSearchParams", () => {
   it("reads every filter", () => {

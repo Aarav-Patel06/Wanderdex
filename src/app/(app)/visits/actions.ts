@@ -5,7 +5,8 @@ import { z } from "zod";
 import type { Category } from "@/lib/categories";
 import { formatVisitedParts, type Precision } from "@/lib/dates";
 import { createClient } from "@/lib/supabase/server";
-import { type VisitFilters, visitFiltersSchema } from "@/lib/visit-filters";
+import type { VisitFilters } from "@/lib/visit-filters";
+import { visitFiltersSchema } from "@/lib/visit-filters-schema";
 import { filterVisits, visitTimeZones } from "@/lib/visit-query";
 
 const PAGE_SIZE = 30;

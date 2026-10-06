@@ -5,7 +5,8 @@ import { FilterBar } from "@/app/(app)/visits/filter-bar";
 import { VisitList } from "@/app/(app)/visits/visit-list";
 import { readAllPages } from "@/lib/paging";
 import { createClient } from "@/lib/supabase/server";
-import { filterOptions, filtersFromSearchParams, filtersSearch, hasFilters } from "@/lib/visit-filters";
+import { filterOptions, filtersSearch, hasFilters } from "@/lib/visit-filters";
+import { filtersFromSearchParams } from "@/lib/visit-filters-schema";
 
 import "./visits.css";
 
