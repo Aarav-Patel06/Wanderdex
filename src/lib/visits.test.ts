@@ -245,8 +245,9 @@ describe("visitEditSchema", () => {
 });
 
 describe("categoryChangeSchema", () => {
-  it("takes one of the 10 categories", () => {
+  it("takes one of the 14 categories", () => {
     expect(categoryChangeSchema.parse({ category: "park_nature" })).toEqual({ category: "park_nature" });
+    expect(categoryChangeSchema.parse({ category: "airport" })).toEqual({ category: "airport" });
     for (const category of ["Park & Nature", "spa", "", null]) {
       expect(categoryChangeSchema.safeParse({ category }).success).toBe(false);
     }

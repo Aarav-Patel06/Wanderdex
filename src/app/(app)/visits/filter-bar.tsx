@@ -120,7 +120,7 @@ export function FilterBar({
   );
 }
 
-// "All" plus the 10 categories, multi-select; on phones the last 8 are in "More".
+// "All" plus the 14 categories, multi-select; on phones the last 12 are in "More".
 function CategoryChips({ value, onChange }: { value: Category[]; onChange: (categories: Category[]) => void }) {
   const moreChosen = MORE.filter((category) => value.includes(category));
 

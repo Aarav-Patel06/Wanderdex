@@ -1,6 +1,6 @@
 # Wanderdex: Project Specification
 
-**Version:** 1.1 (2026-10-05)
+**Version:** 1.2 (2026-10-06)
 **Status:** Core build (Phases 1–3) done and live at `wanderdex.vercel.app`. Everything in §21 "Later" is out of scope.
 **Owner:** Aarav Patel. Personal student / portfolio project.
 
@@ -65,7 +65,7 @@ Storing Google Places data (names, coordinates, addresses, types) in our own dat
 | Save flow | Save from the confirmation card, then a "New place discovered!" toast ("Return visit!" for a place the user already has visits at). No extra confirm dialog on save. |
 | Dialog style | **Every** dialog in the app uses the RPG style |
 | Text parsing AI | Gemini Flash-Lite (free tier). Fallback: Claude Haiku if free limits become a problem. |
-| Categories | Fixed list of 10 (§12.5), no custom categories |
+| Categories | Fixed list of 14 (§12.5), no custom categories |
 | Username | 3–20 chars, `a–z 0–9 _`, not case-sensitive (stored lowercase) |
 | Password | Minimum 6 characters, no other rules, confirm field at signup, **no recovery** |
 | Sessions | Stay logged in until logout |
@@ -210,8 +210,9 @@ If the Supabase project still shows the older "anon" and "service_role" key name
 -- Categories (fixed list)
 create type place_category as enum (
   'food','cafe','bar','museum','landmark',
-  'park_nature','shopping','stay','entertainment','other'
-);
+  'park_nature','shopping','stay','entertainment',
+  'sports','campus','airport','city','other'
+); -- sports, campus, airport, city added 2026-10-06 (ALTER TYPE … ADD VALUE … BEFORE 'other')
 
 create type date_precision as enum ('datetime','date','month');
 
@@ -367,7 +368,7 @@ The add panel has **three separate modes** (as in the design sheet): **Paste Lin
 ### 11.4 Manual fallback (drop a pin)
 1. **Reachable** from every mode's panel ("Can't find it? Drop a pin"), from the "No places found" message (a "Drop a pin" button), and from the confirmation card after a lookup. From a photo, the pin starts at the photo's coordinates (if it had any) and the card gets the photo's date.
 2. **Placing:** the add panel gets out of the way (desktop: the bubble or card closes; phones: the drawer closes), and a "Drop a pin" card over the bottom of the map says what to do ("Click/Tap the map to drop a pin.", then "Pin dropped. Click/Tap again to move it.") with a "Drop pin at center" button, Confirm (once a pin is placed), and Cancel. A click or tap on the map places a pixel pin there; another moves it. A small pixel crosshair marks the map's center (the center of the part the desktop sidebar leaves uncovered), and "Drop pin at center" places the pin there, or moves it, so a pin can be placed without a pointer, and precisely on a phone. The map takes keyboard focus when placing starts, so the arrow keys pan it under the crosshair. Place pins don't open while placing. Escape, Cancel, or Add Visit gives up. Starting from a photo, the map flies to its coordinates (street zoom).
-3. **Confirm** opens the confirmation card for the new place (titled "New place"; desktop side panel, phone drawer): **Name** (required, at most 100 characters) instead of the candidates, **Category** (the 10, starting at Other), and the usual date & time with precision, rating, and note (§11.5). The date starts at the photo's date, or now, in the pin's time zone.
+3. **Confirm** opens the confirmation card for the new place (titled "New place"; desktop side panel, phone drawer): **Name** (required, at most 100 characters) instead of the candidates, **Category** (the 14, starting at Other), and the usual date & time with precision, rating, and note (§11.5). The date starts at the photo's date, or now, in the pin's time zone.
 4. **Saving** (`/api/visits`, a `manual_place` with the name and coordinates, zod-validated): the server works out city and country from the coordinates: a Nearby Search at the point (50 m, then 150 m), using the first result's address components with the §12.1 rules (Tokyo included). If there are none (or Google fails, or Nearby Search is at its monthly cap (§17), which skips the call), the country comes from `public/geo/countries.geojson` by point-in-polygon (English name from its code) and the city stays empty. The time zone comes from the coordinates; the address stays null. It creates a `places` row with `google_place_id = null`, the chosen category, and `created_by = user` (private, §9), then the visit (source `manual`, no `source_input`). After that it's like any save (§11.6 steps 5–7): toasts, the pin, the map flying to it.
 5. A return visit to a manual place uses the place's id ("Add another visit", §14.4). A manual place whose last visit is deleted stays in the database, private and unused (§8).
 
@@ -375,7 +376,7 @@ The add panel has **three separate modes** (as in the design sheet): **Paste Lin
 Shown after any successful lookup:
 - **Candidates:** up to 3, each with category sprite, name, and city/country. The first is preselected; one tap switches.
 - **Date & time:** pre-filled (from the photo, the parsed text, or now), with a precision control: exact time / date only / month only, a segmented toggle that starts at the parsed precision (exact time when it defaults to now). Date only hides the time; month only picks just a month and year. Changing the date or time keeps the chosen precision. Saved per §8.
-- **Category:** auto-set from Google types (§12.5), editable (dropdown of the 10).
+- **Category:** auto-set from Google types (§12.5), editable (dropdown of the 14).
 - **Rating:** optional 1–10 selector, 44px cells. Desktop: one row of 10. **Mobile: two rows of 5** (ten 44px tap targets don't fit across 375px). Tapping the chosen number again clears it.
 - **Note:** optional, up to 2000 characters. It starts one line tall and grows as you type; a character count shows near the limit.
 - **Phones:** Rating and Note start collapsed behind an "Add rating & note" button, which shows both in place, so the card fits (§14.2) and a plain save stays one tap. Desktop shows them from the start.
@@ -465,13 +466,17 @@ Check `primaryType` first, then each entry in `types` in order; first match wins
 | Bar | `pin_bar.png` | `bar`, `pub`, `wine_bar`, `bar_and_grill`, `brewery` |
 | Museum | `pin_museum.png` | `museum`, `art_gallery`, `planetarium` |
 | Landmark | `pin_landmark.png` | `tourist_attraction`, `historical_landmark`, `monument`, `cultural_landmark`, `historical_place`, `church`, `mosque`, `hindu_temple`, `synagogue`, `place_of_worship`, `observation_deck` |
-| Park & Nature | `pin_park_nature.png` | `park`, `national_park`, `state_park`, `hiking_area`, `beach`, `garden`, `botanical_garden`, `campground`, `lake`, `mountain_peak` |
+| Park & Nature | `pin_park_nature.png` | `park`, `national_park`, `state_park`, `hiking_area`, `beach`, `garden`, `botanical_garden`, `campground`, `lake`, `mountain_peak`, `playground`, `fishing_charter`, `fishing_pier`, `fishing_pond` |
 | Shopping | `pin_shopping.png` | `shopping_mall`, `market`, `supermarket`, `store`, any `*_store` |
 | Stay | `pin_stay.png` | `lodging`, `hotel`, `hostel`, `motel`, `resort_hotel`, `bed_and_breakfast`, `guest_house`, `inn` |
-| Entertainment | `pin_entertainment.png` | `movie_theater`, `amusement_park`, `night_club`, `bowling_alley`, `concert_hall`, `performing_arts_theater`, `stadium`, `zoo`, `aquarium`, `casino`, `karaoke`, `video_arcade` |
-| Other | `pin_other.png` | Everything else |
+| Entertainment | `pin_entertainment.png` | `movie_theater`, `amusement_park`, `night_club`, `bowling_alley`, `concert_hall`, `performing_arts_theater`, `stadium`, `arena`, `race_course`, `zoo`, `aquarium`, `casino`, `karaoke`, `video_arcade` |
+| Sports | `pin_sports.png` | `gym`, `fitness_center`, `yoga_studio`, `sports_club`, `sports_complex`, `sports_coaching`, `sports_school`, `sports_activity_location`, `athletic_field`, `swimming_pool`, `tennis_court`, `golf_course`, `indoor_golf_course`, `ski_resort`, `ice_skating_rink`, `skateboard_park`, `cycling_park` (not `stadium`, `arena`, or `race_course`, which are Entertainment; `playground` is Park & Nature) |
+| Campus | `pin_campus.png` | Google's Education types: `university`, `school`, `primary_school`, `secondary_school`, `preschool`, `library`, `academic_department`, `educational_institution`, `research_institute`, plus `school_district` |
+| Airport | `pin_airport.png` | `airport`, `international_airport`, `airstrip`, `heliport` |
+| City | `pin_city.png` | `locality`, `sublocality`, `sublocality_level_1`–`_5`, `neighborhood`, `postal_town`, `administrative_area_level_1`–`_7`, `colloquial_area` (`country` is Other) |
+| Other | `pin_other.png` | Everything else, including `country` and the spa, sauna, and massage types |
 
-Display labels: "Food", "Cafe", "Bar", "Museum", "Landmark", "Park & Nature", "Shopping", "Stay", "Entertainment", "Other".
+Display labels: "Food", "Cafe", "Bar", "Museum", "Landmark", "Park & Nature", "Shopping", "Stay", "Entertainment", "Sports", "Campus", "Airport", "City", "Other". This order is used everywhere categories are listed (dropdowns, the legend, filter chips).
 
 ---
 
@@ -519,8 +524,8 @@ Display labels: "Food", "Cafe", "Bar", "Museum", "Landmark", "Park & Nature", "S
 
 ### 13.6 Map legend
 - A pixel icon button (Pixelarticons, 44px) below the zoom buttons toggles a legend card. Closed by default. Escape closes it, and so does a tap or click on the map outside it (on the map or a pin; dragging or pinching doesn't).
-- The card is a pixel card on `surface` titled "MAP LEGEND". It lists all 10 category sprites with their §12.5 labels, in that order, plus the cluster pin labelled "Group" and a 32px `visited` swatch labelled "Visited country". Compact: tight rows, labels in Small (desktop) or Tiny (phones), sprites at 32px (§16.7).
-- Desktop: it opens beside the map controls, top-aligned with them, in one column. Phones: it opens below the map controls, across the map's width, in a two-column grid. It never covers the zoom buttons, the legend button, the attribution, or the tab bar (the buttons stay tappable while it's open), and it scrolls inside only when it's taller than the space.
+- The card is a pixel card on `surface` titled "MAP LEGEND". It lists all 14 category sprites with their §12.5 labels, in that order, plus the cluster pin labelled "Group" and a 32px `visited` swatch labelled "Visited country". Compact: tight rows, labels in Small (desktop) or Tiny (phones), sprites at 32px (§16.7).
+- Desktop: it opens beside the map controls, top-aligned with them, in one column. Phones: it opens below the map controls, across the map's width, in a two-column grid (16 entries, 8 rows). It never covers the zoom buttons, the legend button, the attribution, or the tab bar (the buttons stay tappable while it's open), and it scrolls inside only when it's taller than the space.
 
 ---
 
@@ -550,7 +555,7 @@ Display labels: "Food", "Cafe", "Bar", "Museum", "Landmark", "Park & Nature", "S
 - Sorted by `visited_at` descending (most recent visit first).
 - **Header:** "My Visits" (H1), the subtitle "Every place you've explored." (Small), and a pixel divider line ending in a small `accent` sparkle ornament. No header icon. The page uses the background art (§16.7).
 - Filters, spanning the full content width, laid out as in the sheet: a row of **category** chips, then a row of compact **City**, **Country**, and **Date** controls, and a "Clear filters" action whenever any filter is set. Fits 375px with no horizontal scrolling.
-  - **Category chips:** "All" + the 10 categories (§12.5), multi-select. "All" means no category filter: choosing it clears the others, and turning off the last category turns it back on. Chosen chips are `accent` with dark text, like the add flow's choices; at least 44px tall. Below 640px: All, Food, Cafe + a "More" dropdown with the other 8 (as in the sheet); wider: every chip, wrapping.
+  - **Category chips:** "All" + the 14 categories (§12.5), multi-select. "All" means no category filter: choosing it clears the others, and turning off the last category turns it back on. Chosen chips are `accent` with dark text, like the add flow's choices; at least 44px tall. Below 640px: All, Food, Cafe + a "More" dropdown with the other 12 (as in the sheet); wider: every chip, wrapping.
   - **City / Country:** dropdowns of the user's own distinct values, plus "All cities" / "All countries". With a country chosen, the city list shows only that country's cities, and a chosen city that isn't one of them is cleared.
   - **Date:** opens a popover with From and To on one calendar (§16.6); either end can be left open ("Any"). Matches by precision, in each visit's own time zone: a month-only visit matches if any day of its month is in the range, a date-only visit if its day is, an exact-time visit by its local date.
   - Filtering runs on the server under the user's session (RLS), keeps the sort and "Load more", and lives in the URL query (`?category=food,cafe&country=…&city=…&from=YYYY-MM-DD&to=YYYY-MM-DD`), so reload and Back keep it.
@@ -563,7 +568,7 @@ Display labels: "Food", "Cafe", "Bar", "Museum", "Landmark", "Park & Nature", "S
 - No visits yet: "No visits yet, traveler. Your adventure starts on the Overworld!" on a pixel card on `surface`, with no filters. "No visits match these filters." (§11.7) sits on the same kind of card.
 
 ### 14.4 Place detail (`/places/[id]`)
-- **Header:** category sprite (64px), name, address, city/country, the user's category for this place (a dropdown of the 10; changing it updates all of the user's visits for this place, §8, so their pin uses it), and an **"Open in Google Maps"** button (§12.2).
+- **Header:** category sprite (64px), name, address, city/country, the user's category for this place (a dropdown of the 14; changing it updates all of the user's visits for this place, §8, so their pin uses it), and an **"Open in Google Maps"** button (§12.2).
 - The user's visits here, newest first, each with its date (to its precision, in the visit's time zone), rating (if any), and note.
 - Each visit is **editable** (date, precision, rating, note) in an RPG-styled edit dialog with the confirmation card's controls and rules (§11.5), in the visit's stored time zone; the category is the header's. Each is **deletable** with the RPG confirm dialog: "Delete this visit? This can't be undone." Delete / Cancel. The place row is never deleted (§8).
 - **"Add another visit"** button: opens the confirmation card on this page (wide desktop windows, from 1280px: side panel on the right, and the page narrows to end left of it so nothing hides behind it; narrower desktop windows, which have no room for both: in the page, right under the button, scrolled into view; phones: the drawer), with this place as the only candidate and its current category. It saves by the place's id (§11.6).
@@ -684,6 +689,10 @@ All are true pixel art at native size with no semi-transparent pixels; outline c
 | `pin_shopping.png` | 32×32 | Shopping pin |
 | `pin_stay.png` | 32×32 | Stay pin |
 | `pin_entertainment.png` | 32×32 | Entertainment pin |
+| `pin_sports.png` | 32×32 | Sports pin |
+| `pin_campus.png` | 32×32 | Campus pin |
+| `pin_airport.png` | 32×32 | Airport pin |
+| `pin_city.png` | 32×32 | City pin |
 | `pin_other.png` | 32×32 | Other pin |
 | `pin_group.png` | 32×32 | Cluster pin (count goes in a corner badge) |
 | `preview_8x.png`, `preview2_8x.png` | — | Previews only; not used in the app |
@@ -699,7 +708,7 @@ The `bg/` pieces use their own soft colors (darker shades of the cream backgroun
 
 **Background art:** the plain cream pages (`/login`, `/signup`, `/visits`, `/places/[id]`, not the Overworld) have a fixed layer of the `bg/` pieces behind the content. It stays put while the page scrolls, takes no pointer events, is hidden from assistive tech, and never causes horizontal scrolling. Each piece is anchored to a corner of the layer as in `docs/design/background-preview.png` (laid out at 1× in `background-composite.png`), at a whole-number scale picked by the layer's size: 2×, 3× from 840×696, 4× from 1500×928. No piece is stretched or cropped to fill. On desktop app pages the layer covers the area right of the sidebar. Phones (layer narrower than 640px or shorter than 464px) get only the compass, the stamp, and a few sparkles at 2×, in the corners the page's text leaves free: the top ones beside the logo on login/signup, the bottom ones (above the tab bar) on app pages.
 
-Always render with `image-rendering: pixelated` at whole-number multiples (32, 64, 96, 128px). Food, Cafe, Museum, and Shopping pins are all reds and are told apart by icon only; this is accepted. Category sprites also replace photo thumbnails in cards and lists.
+Always render with `image-rendering: pixelated` at whole-number multiples (32, 64, 96, 128px). Food, Museum, and Shopping pins are all reds and are told apart by icon only; this is accepted. (Cafe was a fourth red until its sprite was redrawn in brown, 2026-10-06.) Category sprites also replace photo thumbnails in cards and lists.
 
 ### 16.8 Toast behavior
 Toasts auto-dismiss after ~4 s and have a close (×) button. Copy is in §11.6 and §11.7. They appear at the top; when a save shows two, both are fully visible, "New place discovered!" (or "Return visit!") first. On phones they sit left of the Overworld's avatar button, so they cover neither it nor the tab bar.

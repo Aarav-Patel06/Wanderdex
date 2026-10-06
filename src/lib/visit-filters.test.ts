@@ -24,6 +24,17 @@ describe("filtersFromSearchParams", () => {
     ).toEqual({ categories: ["food", "cafe"], country: "Japan", city: "Tokyo", from: "2025-03-01", to: "2025-03-31" });
   });
 
+  it("reads the newer categories, in their fixed order", () => {
+    expect(filtersFromSearchParams({ category: "other,city,airport,campus,sports,entertainment" }).categories).toEqual([
+      "entertainment",
+      "sports",
+      "campus",
+      "airport",
+      "city",
+      "other",
+    ]);
+  });
+
   it("is no filters for an empty query", () => {
     expect(filtersFromSearchParams({})).toEqual(NO_FILTERS);
   });

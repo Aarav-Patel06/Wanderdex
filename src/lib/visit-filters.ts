@@ -32,7 +32,7 @@ export function hasFilters(filters: VisitFilters) {
   return filtersSearch(filters) !== "";
 }
 
-// The chips (SPEC §14.3): "All" plus the 10 categories, multi-select. `next` is the toggle
+// The chips (SPEC §14.3): "All" plus the 14 categories, multi-select. `next` is the toggle
 // group's new value, "all" included when it's on. Turning "All" on clears the categories;
 // turning it off (or the last category) leaves none, which is All again.
 export function categoriesFromChips(current: Category[], next: string[]): Category[] {

@@ -157,7 +157,7 @@ export function WhenField({
   );
 }
 
-// The 10 categories (SPEC §12.5) as a dropdown with their sprites.
+// The 14 categories (SPEC §12.5) as a dropdown with their sprites.
 export function CategorySelect({
   id,
   value,

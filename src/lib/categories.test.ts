@@ -54,6 +54,10 @@ describe("categoryFromGoogle", () => {
     ["park_nature", "campground"],
     ["park_nature", "lake"],
     ["park_nature", "mountain_peak"],
+    ["park_nature", "playground"],
+    ["park_nature", "fishing_charter"],
+    ["park_nature", "fishing_pier"],
+    ["park_nature", "fishing_pond"],
     ["shopping", "shopping_mall"],
     ["shopping", "market"],
     ["shopping", "supermarket"],
@@ -73,11 +77,61 @@ describe("categoryFromGoogle", () => {
     ["entertainment", "concert_hall"],
     ["entertainment", "performing_arts_theater"],
     ["entertainment", "stadium"],
+    ["entertainment", "arena"],
+    ["entertainment", "race_course"],
     ["entertainment", "zoo"],
     ["entertainment", "aquarium"],
     ["entertainment", "casino"],
     ["entertainment", "karaoke"],
     ["entertainment", "video_arcade"],
+    ["sports", "gym"],
+    ["sports", "fitness_center"],
+    ["sports", "yoga_studio"],
+    ["sports", "sports_club"],
+    ["sports", "sports_complex"],
+    ["sports", "sports_coaching"],
+    ["sports", "sports_school"],
+    ["sports", "sports_activity_location"],
+    ["sports", "athletic_field"],
+    ["sports", "swimming_pool"],
+    ["sports", "tennis_court"],
+    ["sports", "golf_course"],
+    ["sports", "indoor_golf_course"],
+    ["sports", "ski_resort"],
+    ["sports", "ice_skating_rink"],
+    ["sports", "skateboard_park"],
+    ["sports", "cycling_park"],
+    ["campus", "university"],
+    ["campus", "school"],
+    ["campus", "primary_school"],
+    ["campus", "secondary_school"],
+    ["campus", "preschool"],
+    ["campus", "library"],
+    ["campus", "academic_department"],
+    ["campus", "educational_institution"],
+    ["campus", "research_institute"],
+    ["campus", "school_district"],
+    ["airport", "airport"],
+    ["airport", "international_airport"],
+    ["airport", "airstrip"],
+    ["airport", "heliport"],
+    ["city", "locality"],
+    ["city", "sublocality"],
+    ["city", "sublocality_level_1"],
+    ["city", "sublocality_level_2"],
+    ["city", "sublocality_level_3"],
+    ["city", "sublocality_level_4"],
+    ["city", "sublocality_level_5"],
+    ["city", "neighborhood"],
+    ["city", "postal_town"],
+    ["city", "administrative_area_level_1"],
+    ["city", "administrative_area_level_2"],
+    ["city", "administrative_area_level_3"],
+    ["city", "administrative_area_level_4"],
+    ["city", "administrative_area_level_5"],
+    ["city", "administrative_area_level_6"],
+    ["city", "administrative_area_level_7"],
+    ["city", "colloquial_area"],
   ])("%s ← %s", (category, type) => {
     expect(categoryFromGoogle(type, [])).toBe(category);
   });
@@ -100,13 +154,31 @@ describe("categoryFromGoogle", () => {
     expect(categoryFromGoogle("superstore")).toBe("other");
   });
 
+  it("keeps venues for watching sport in Entertainment, and playgrounds in Park & Nature", () => {
+    expect(categoryFromGoogle("stadium", ["sports_complex", "athletic_field"])).toBe("entertainment");
+    expect(categoryFromGoogle("arena", ["sports_activity_location"])).toBe("entertainment");
+    expect(categoryFromGoogle("playground", ["sports_activity_location"])).toBe("park_nature");
+  });
+
+  it("now sorts an airport that used to fall through to its types", () => {
+    expect(categoryFromGoogle("airport", ["point_of_interest", "tourist_attraction"])).toBe("airport");
+  });
+
+  it("leaves a country as other", () => {
+    expect(categoryFromGoogle("country", ["political"])).toBe("other");
+  });
+
+  it.each(["spa", "sauna", "massage", "massage_spa", "wellness_center"])("leaves %s as other", (type) => {
+    expect(categoryFromGoogle(type, [])).toBe("other");
+  });
+
   it("checks primaryType before types", () => {
     expect(categoryFromGoogle("cafe", ["restaurant", "food"])).toBe("cafe");
     expect(categoryFromGoogle("museum", ["tourist_attraction"])).toBe("museum");
   });
 
   it("falls through an unmapped primaryType to types, in order", () => {
-    expect(categoryFromGoogle("airport", ["point_of_interest", "tourist_attraction", "restaurant"])).toBe(
+    expect(categoryFromGoogle("train_station", ["point_of_interest", "tourist_attraction", "restaurant"])).toBe(
       "landmark",
     );
     expect(categoryFromGoogle("point_of_interest", ["bakery", "cafe"])).toBe("food");
@@ -115,10 +187,11 @@ describe("categoryFromGoogle", () => {
   it("uses types when there's no primaryType", () => {
     expect(categoryFromGoogle(null, ["establishment", "park"])).toBe("park_nature");
     expect(categoryFromGoogle(undefined, ["hotel"])).toBe("stay");
+    expect(categoryFromGoogle(null, ["political", "locality"])).toBe("city");
   });
 
   it.each([
-    ["an unmapped type", "airport", ["point_of_interest", "establishment"]],
+    ["an unmapped type", "train_station", ["point_of_interest", "establishment"]],
     ["nothing at all", null, []],
     ["an empty primaryType", "", []],
   ] as const)("falls back to other for %s", (_, primaryType, types) => {
@@ -138,6 +211,10 @@ describe("labels and sprites", () => {
       "Shopping",
       "Stay",
       "Entertainment",
+      "Sports",
+      "Campus",
+      "Airport",
+      "City",
       "Other",
     ]);
   });
