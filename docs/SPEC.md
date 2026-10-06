@@ -1,7 +1,7 @@
 # Wanderdex: Project Specification
 
-**Version:** 1.2 (2026-10-06)
-**Status:** Core build (Phases 1–3) done and live at `wanderdex.vercel.app`. Everything in §21 "Later" is out of scope.
+**Version:** 1.3 (2026-10-06)
+**Status:** Core build (Phases 1–3) done and live at `wanderdex.vercel.app`. Phase 4 (Trip Photos import, Profile, passport secret; §20) is specified, not built. Everything in §21 "Later" is out of scope.
 **Owner:** Aarav Patel. Personal student / portfolio project.
 
 ---
@@ -19,7 +19,7 @@
 
 ## 1. Overview
 
-Wanderdex is a web app that works as a personal travel passport. Users log places they've visited by pasting a Google or Apple Maps link, typing a plain-language description, or uploading a photo. The app identifies the place, sorts it by category, city, and country, and shows every place on a zoomable, pixelated 8-bit world map called the **Overworld**. Users can rate each visit 1–10 and add notes. The whole UI is styled like a retro 8-bit video game, and it must work well on both phones and desktops.
+Wanderdex is a web app that works as a personal travel passport. Users log places they've visited by pasting a Google or Apple Maps link, typing a plain-language description, or uploading a photo, or import a whole trip's photos at once. The app identifies the place, sorts it by category, city, and country, and shows every place on a zoomable, pixelated 8-bit world map called the **Overworld**. Users can rate each visit 1–10 and add notes, and a profile page shows their travel stats. The whole UI is styled like a retro 8-bit video game, and it must work well on both phones and desktops.
 
 ### 1.1 Goals
 1. Adding a place takes seconds and usually needs only one tap to confirm.
@@ -28,10 +28,10 @@ Wanderdex is a web app that works as a personal travel passport. Users log place
 4. Runs on free tiers for a personal-scale project.
 
 ### 1.2 Non-goals (for the core build)
-Social features, sharing, public profiles, photo storage, stats, stamps, dark mode, native apps, email of any kind, password recovery.
+Social features, sharing, public profiles, photo storage, stamps, dark mode, native apps, email of any kind, password recovery.
 
 ### 1.3 Scope note on Google data
-Storing Google Places data (names, coordinates, addresses, types) in our own database is a gray area under Google Maps Platform terms. The owner has **accepted this for a personal student project**. If Wanderdex ever becomes a public product, this must be revisited (options: open data like OpenStreetMap, or re-fetching from Google instead of storing).
+Storing Google Places data (names, coordinates, addresses, types) in our own database, including the shared lookup cache (§17), is a gray area under Google Maps Platform terms. The owner has **accepted this for a personal student project**. If Wanderdex ever becomes a public product, this must be revisited (options: open data like OpenStreetMap, or re-fetching from Google instead of storing).
 
 ---
 
@@ -42,7 +42,9 @@ Storing Google Places data (names, coordinates, addresses, types) in our own dat
 | **Overworld** | The map screen (`/`). Name taken from the game term for a world map. |
 | **Place** | A real-world location (a cafe, a museum). Shared across users when it comes from Google. |
 | **Visit** | One user's record of going to a place, with date, rating, and note. A place can have many visits. |
-| **Add panel** | The UI for adding a visit, with three modes: Paste Link, Upload Photo, Type Location. |
+| **Add panel** | The UI for adding a visit, with four modes: Paste Link, Upload Photo, Type Location, Trip Photos. |
+| **Stop** | In a Trip Photos import, a group of photos taken at one spot around one time. Each stop can become one visit (§11.8). |
+| **Review screen** | The Trip Photos screen listing an import's stops, where the user checks matches and saves them all at once (§11.8). |
 | **Candidates** | The 1–3 place matches shown for the user to pick from. |
 | **Confirmation card** | The card showing candidates plus the date, category, rating, and note fields. Saving happens here. |
 | **RPG dialog** | The app's dialog style: dark box, orange pixel border, RPG-style text and choices (see sheet). |
@@ -59,19 +61,22 @@ Storing Google Places data (names, coordinates, addresses, types) in our own dat
 | Map detail | Country shapes **plus** street tiles (OpenFreeMap), pixelated |
 | Map start view | Fit all the user's pins; world view if they have none |
 | Same place, many visits | One pin per place; place detail lists every visit |
-| Add modes | Three separate modes: Paste Link, Upload Photo, Type Location |
+| Add modes | Four separate modes: Paste Link, Upload Photo, Type Location, Trip Photos (many photos at once, §11.8) |
 | Partial dates | Allowed (`datetime`, `date`, `month`), stored with a precision flag |
 | Displayed time zone | The place's local time zone |
 | Save flow | Save from the confirmation card, then a "New place discovered!" toast ("Return visit!" for a place the user already has visits at). No extra confirm dialog on save. |
-| Dialog style | **Every** dialog in the app uses the RPG style |
+| Dialog style | **Every** dialog in the app uses the RPG style, except the passport secret (§15.1) |
 | Text parsing AI | Gemini Flash-Lite (free tier). Fallback: Claude Haiku if free limits become a problem. |
 | Categories | Fixed list of 14 (§12.5), no custom categories |
 | Username | 3–20 chars, `a–z 0–9 _`, not case-sensitive (stored lowercase) |
-| Password | Minimum 6 characters, no other rules, confirm field at signup, **no recovery** |
+| Password | Minimum 6 characters, no other rules, confirm field at signup, **no recovery**; changeable on the profile (§14.6) |
 | Sessions | Stay logged in until logout |
+| Profile | `/profile`: stats, change password, export, delete account, log out (§14.6). Still no Settings page. |
+| Country count | Out of 195 (193 UN members + Vatican City + Palestine); territories count toward their sovereign (§14.6) |
+| Account deletion | Self-serve on the profile, confirmed by typing the username; can't be undone (§14.6) |
 | Edit/delete | All visit fields editable; delete asks for confirmation in an RPG dialog |
 | Visits list sort | Most recent visit date first |
-| Photos | Read in the browser only. **Never uploaded or stored.** |
+| Photos | Read in the browser only. **Never uploaded or stored.** Trip Photos too (§11.8). |
 | Body font | VT323 |
 | Dark mode | Not in core build (Later list) |
 | Build method | Claude Code builds; a separate Claude chat handles design decisions and reviews |
@@ -102,8 +107,8 @@ Storing Google Places data (names, coordinates, addresses, types) in our own dat
 | Database + auth | **Supabase** (Postgres + Auth + RLS), `@supabase/ssr` for Next.js | |
 | Place lookup | **Google Places API (New)** | Text Search, Nearby Search |
 | Text parsing | **Gemini API**, Flash-Lite model, structured JSON output | Server-side only |
-| Photo metadata | **exifr** | Runs in the browser; supports HEIC |
-| Coordinates → time zone | A tz lookup library (e.g. `@photostructure/tz-lookup`) | Offline, no API |
+| Photo metadata | **exifr** | Runs in the browser; supports HEIC. For Trip Photos it runs in a Web Worker (no library) and also reads the embedded thumbnails for the review (§11.8). |
+| Coordinates → time zone | A tz lookup library (e.g. `@photostructure/tz-lookup`) | Offline, no API. On the server, plus a lazy browser chunk for a dropped pin and Trip Photos. |
 | Date handling | `date-fns` + `date-fns-tz` (or equivalent) | |
 | Validation | **zod** | For API inputs and the LLM's JSON output |
 | Unit tests | **Vitest** | Parsers and mapping logic (§19) |
@@ -120,21 +125,23 @@ Other free resources the owner may use: **Lospec** (palettes), **itch.io** free 
 ```
 Browser (Next.js client)
  ├─ Overworld map: MapLibre (pixelated canvas) + HTML pin markers
- ├─ Add panel: Paste Link | Upload Photo (exifr, local only) | Type Location
+ ├─ Add panel: Paste Link | Upload Photo (exifr, local only) | Type Location | Trip Photos (exifr, local only, many at once)
  └─ No direct Supabase access: pages read on the server, changes go through the routes below
         │
         ▼
 Next.js server (Vercel)
- ├─ Pages + Server Functions → read the user's data with their session (RLS); login, signup, logout
+ ├─ Pages + Server Functions → read the user's data with their session (RLS); login, signup, logout;
+ │                             profile stats, export data, change password, delete account (admin API)
  ├─ /api/resolve/link    → expand link, parse, Google Text Search
  ├─ /api/resolve/text    → Gemini parse, Google Text Search
  ├─ /api/resolve/nearby  → Google Nearby Search (photo GPS / manual pin)
+ ├─ /api/resolve/import  → a trip's stops: the user's own places first, else Google Nearby Search (§11.8)
  ├─ /api/visits (save)   → upsert place (secret key), reuse one by id, or create a manual place, + insert visit
  ├─ /api/visits/[id]    → edit / delete one visit (session client, RLS)
  ├─ /api/places/[id]/category → the user's category for a place (their visits only)
  └─ /api/health          → trivial DB query (keep-alive target)
         │
-        ├─► Supabase Postgres (profiles, places, visits, resolve_log, google_call_log)
+        ├─► Supabase Postgres (profiles, places, visits, resolve_log, google_call_log, nearby_cache, import_log)
         ├─► Google Places API (New)   [secret key, server only]
         └─► Gemini API                [secret key, server only]
 
@@ -153,6 +160,7 @@ wanderdex/
 ├─ docs/
 │  ├─ SPEC.md
 │  ├─ DECISIONS.md
+│  ├─ ARCHITECTURE.md     # Trip Photos pipeline + cost layers (§11.8, §17)
 │  └─ design/design-sheet.png
 ├─ public/
 │  ├─ sprites/            # the PNG assets (§16.7)
@@ -164,11 +172,15 @@ wanderdex/
 │  │  ├─ (app)/page.tsx               # Overworld
 │  │  ├─ (app)/visits/page.tsx        # My Visits
 │  │  ├─ (app)/places/[id]/page.tsx   # Place detail + its visits
+│  │  ├─ (app)/profile/page.tsx       # Profile: stats + account (§14.6)
 │  │  └─ api/...                      # route handlers (§5)
 │  ├─ components/
 │  │  ├─ ui/              # shadcn + 8bitcn components
 │  │  ├─ map/             # Overworld, markers, cluster badge
 │  │  ├─ add/             # add panel, modes, confirmation card
+│  │  ├─ import/          # Trip Photos review screen (§11.8)
+│  │  ├─ profile/         # profile sections, bar chart, account actions
+│  │  ├─ passport/        # passport secret (§15.1)
 │  │  └─ dialogs/         # RPG dialog wrapper
 │  ├─ lib/
 │  │  ├─ supabase/        # server (session) + admin (secret key) clients
@@ -177,9 +189,12 @@ wanderdex/
 │  │  ├─ links/           # link parsing (unit tested)
 │  │  ├─ categories.ts    # Google type → category map (unit tested)
 │  │  ├─ dates.ts         # precision + time zone logic (unit tested)
-│  │  └─ photo.ts         # exifr reading
+│  │  ├─ photo.ts         # exifr reading
+│  │  ├─ trip/            # Trip Photos: reading worker, grouping, grid index, its config (unit tested)
+│  │  └─ stats/           # profile stats, country + continent tables (unit tested)
 │  └─ styles/globals.css  # tokens
 ├─ supabase/migrations/   # SQL (§8, §9)
+├─ scripts/bench-import.* # synthetic Trip Photos benchmark (§11.8, `pnpm bench:import`)
 ├─ .github/workflows/keepalive.yml
 ├─ .env.example
 └─ README.md
@@ -257,18 +272,23 @@ create table visits (
   note              text check (char_length(note) <= 2000),
   source            visit_source not null,
   source_input      text,                      -- original link or typed text (never photo data)
+  import_id         uuid,                      -- Trip Photos import (§11.8), else null   (Phase 4)
+  import_stop       smallint,                  -- the stop's number in that import        (Phase 4)
   created_at        timestamptz not null default now(),
   updated_at        timestamptz not null default now()
 );
 
 create index visits_user_visited_idx on visits (user_id, visited_at desc);
 create index visits_user_place_idx   on visits (user_id, place_id);
+-- Idempotent import saves (§11.8 step 8): one visit per import stop             (Phase 4)
+create unique index visits_import_stop_idx on visits (user_id, import_id, import_stop)
+  where import_id is not null;
 
 -- For per-user rate limiting of lookups
 create table resolve_log (
   id         bigint generated always as identity primary key,
   user_id    uuid not null references auth.users(id) on delete cascade,
-  kind       text not null,                  -- 'link' | 'text' | 'nearby'
+  kind       text not null,                  -- 'link' | 'text' | 'nearby' | 'import' (§17; plain text, so 'import' needs no migration)
   created_at timestamptz not null default now()
 );
 create index resolve_log_user_time_idx on resolve_log (user_id, created_at desc);
@@ -281,6 +301,31 @@ create table google_call_log (
   created_at timestamptz not null default now()
 );
 create index google_call_log_sku_time_idx on google_call_log (sku, created_at);
+
+-- Phase 4 (one migration in step 4.2, with the visits columns above)
+
+-- Shared Nearby Search cache (§17): one row per rounded location cell, shared by all users
+create table nearby_cache (
+  cell       text primary key,                -- rounded 'lat,lng' of the looked-up point
+  candidates jsonb not null,                  -- up to 3 results (§12.1 fields); [] = none within 150 m
+  fetched_at timestamptz not null default now()
+);                                            -- no user id: it records places, not who looked
+create index nearby_cache_fetched_idx on nearby_cache (fetched_at);
+
+-- One row per Trip Photos import's lookups (§11.8 step 5): counts only, no locations
+create table import_log (
+  id               bigint generated always as identity primary key,
+  import_id        uuid not null unique,      -- also on the import's visits
+  user_id          uuid references auth.users(id) on delete set null,
+  stops            int not null,
+  local_matches    int not null,              -- stops answered by the user's own places
+  shared           int not null,              -- stops answered by another stop's lookup
+  cache_hits       int not null,              -- lookups answered by nearby_cache
+  google_lookups   int not null,              -- lookups sent to Google
+  google_calls     int not null,              -- Google calls made (a 150 m retry counts twice)
+  unmatched_limit  int not null,              -- stops left unmatched by the allowance or a cap
+  created_at       timestamptz not null default now()
+);
 ```
 
 **Why `category` is on `visits`:** `places` is shared across users, so one user's category edit must not change it for everyone. `places.category` is the auto-detected default; each visit copies it at creation. **One category per user per place:** when a user edits the category on a place detail page, update **all of that user's visits for that place**, so their pin stays consistent. The pin uses that category. The same applies when a save adds a visit at a place where the user already has visits (by id, or a signed lookup of a place they've logged) in a different category: all of their visits there take the new one (§11.6 step 4).
@@ -294,6 +339,7 @@ create index google_call_log_sku_time_idx on google_call_log (sku, created_at);
 - Rows are tiny (~1 KB per visit), so the free 500 MB database holds hundreds of thousands of visits.
 - `updated_at` is maintained by a trigger.
 - Deleting a visit never deletes its place row, a manual place (§11.4) included.
+- **Account deletion (§14.6):** nothing may block deleting a user from `auth.users`. `profiles`, `visits`, and `resolve_log` cascade. `places.created_by`, `google_call_log.user_id`, and `import_log.user_id` become null (`on delete set null`): a deleted user's Google calls stay counted toward the monthly cap (§17), and their import counts stay for analysis. The server deletes the user's private manual places itself (§14.6), since `set null` would leave them orphaned.
 
 ---
 
@@ -307,7 +353,9 @@ Enable RLS on every table.
 | `places` | Logged-in users can read rows where `google_place_id is not null`, **or** where `created_by = auth.uid()` (manual places are private to their creator). **No insert/update from the browser**; the server inserts with the secret key. |
 | `visits` | A user can select, insert, update, and delete only rows where `user_id = auth.uid()`. |
 | `resolve_log` | No browser access. Server only. |
-| `google_call_log` | No browser access. Server only. |
+| `google_call_log` | No browser access. Server only. Its `user_id` becomes null when the user is deleted, so it never blocks account deletion (§8). |
+| `nearby_cache` | No browser access: RLS on, no policies, privileges for `service_role` only. |
+| `import_log` | No browser access: RLS on, no policies, privileges for `service_role` only. |
 
 ---
 
@@ -322,14 +370,15 @@ Enable RLS on every table.
 - **Login fields:** Username, Password. **No "Forgot password?" link.** No email field anywhere.
 - **Supabase settings:** email confirmations **off**; built-in auth rate limits **on** (they matter because passwords can be simple).
 - **Sessions:** persistent; the user stays logged in until they log out.
-- **Log out:** confirmed with an RPG dialog ("Leave the Overworld?" Yes / No).
+- **Log out:** confirmed with an RPG dialog ("Leave the Overworld?" Yes / No). It's in the desktop sidebar and in the profile's Account section (the only place on phones).
+- **Change password and delete account:** on the profile (§14.6).
 - **Route protection:** logged-out users are redirected to `/login`; logged-in users visiting `/login` or `/signup` go to `/`.
 
 ---
 
 ## 11. Adding a visit
 
-The add panel has **three separate modes** (as in the design sheet): **Paste Link**, **Upload Photo**, **Type Location**. There is no auto-detection between modes. A manual fallback is always reachable.
+The add panel has **four separate modes**: **Paste Link**, **Upload Photo**, **Type Location** (as in the design sheet), and **Trip Photos** (§11.8), which adds many visits at once through its own review screen instead of the confirmation card. There is no auto-detection between modes. A manual fallback is always reachable.
 
 ### 11.1 Paste Link (server: `/api/resolve/link`)
 1. Validate that the input is a supported URL:
@@ -353,7 +402,7 @@ The add panel has **three separate modes** (as in the design sheet): **Paste Lin
 1. The user picks one image with the device's normal image picker ("Choose photo"), or, on desktop, drops it on the panel. JPEG, PNG, HEIC, and WebP are read; any other file shows "That file isn't a photo we can read." (so does a file the reader can't parse).
 2. **Read metadata in the browser with exifr** (`src/lib/photo.ts`; exifr loads only when a photo is picked): GPS latitude/longitude, `DateTimeOriginal`, `OffsetTimeOriginal`. **The image is never uploaded, stored, or sent anywhere.** Only the coordinates go to `/api/resolve/nearby` (it accepts `{ lat, lng }` and nothing else); the date goes to the server only as the saved visit's date. GPS of exactly 0,0 counts as none.
 3. **No GPS** → warning alert "This photo has no location data." with "Type where it was taken instead.", and the panel switches to Type Location, showing the photo's date if it had one. That date pre-fills the confirmation card (exact time) unless the typed text gives a date. The visit is a Type Location visit (source `text`).
-4. **Has GPS** → `POST /api/resolve/nearby` (session check, zod, signed candidates like the other lookups): Google Nearby Search, radius 50 m, ranked by distance, max 3 results. If none, retry once at 150 m. If still none, go straight to the drop-a-pin flow (§11.4) with the pin pre-placed at the photo's coordinates.
+4. **Has GPS** → `POST /api/resolve/nearby` (session check, zod, signed candidates like the other lookups): Google Nearby Search, radius 50 m, ranked by distance, max 3 results. If none, retry once at 150 m. The shared lookup cache (§17) is checked first. If still none, go straight to the drop-a-pin flow (§11.4) with the pin pre-placed at the photo's coordinates.
 5. **Date:** use `DateTimeOriginal` (precision `datetime`). If `OffsetTimeOriginal` exists, use it (the instant, shown in the place's time zone); otherwise interpret the time in the place's time zone. **No date** → default to now. The card works in its first candidate's zone, as for the other modes.
 6. Visits saved from this mode have source `photo` and no `source_input`.
 7. Expect GPS to be missing often: phone browser photo pickers and messaging apps frequently strip location data. This is expected behavior, not a bug.
@@ -369,7 +418,7 @@ The add panel has **three separate modes** (as in the design sheet): **Paste Lin
 1. **Reachable** from every mode's panel ("Can't find it? Drop a pin"), from the "No places found" message (a "Drop a pin" button), and from the confirmation card after a lookup. From a photo, the pin starts at the photo's coordinates (if it had any) and the card gets the photo's date.
 2. **Placing:** the add panel gets out of the way (desktop: the bubble or card closes; phones: the drawer closes), and a "Drop a pin" card over the bottom of the map says what to do ("Click/Tap the map to drop a pin.", then "Pin dropped. Click/Tap again to move it.") with a "Drop pin at center" button, Confirm (once a pin is placed), and Cancel. A click or tap on the map places a pixel pin there; another moves it. A small pixel crosshair marks the map's center (the center of the part the desktop sidebar leaves uncovered), and "Drop pin at center" places the pin there, or moves it, so a pin can be placed without a pointer, and precisely on a phone. The map takes keyboard focus when placing starts, so the arrow keys pan it under the crosshair. Place pins don't open while placing. Escape, Cancel, or Add Visit gives up. Starting from a photo, the map flies to its coordinates (street zoom).
 3. **Confirm** opens the confirmation card for the new place (titled "New place"; desktop side panel, phone drawer): **Name** (required, at most 100 characters) instead of the candidates, **Category** (the 14, starting at Other), and the usual date & time with precision, rating, and note (§11.5). The date starts at the photo's date, or now, in the pin's time zone.
-4. **Saving** (`/api/visits`, a `manual_place` with the name and coordinates, zod-validated): the server works out city and country from the coordinates: a Nearby Search at the point (50 m, then 150 m), using the first result's address components with the §12.1 rules (Tokyo included). If there are none (or Google fails, or Nearby Search is at its monthly cap (§17), which skips the call), the country comes from `public/geo/countries.geojson` by point-in-polygon (English name from its code) and the city stays empty. The time zone comes from the coordinates; the address stays null. It creates a `places` row with `google_place_id = null`, the chosen category, and `created_by = user` (private, §9), then the visit (source `manual`, no `source_input`). After that it's like any save (§11.6 steps 5–7): toasts, the pin, the map flying to it.
+4. **Saving** (`/api/visits`, a `manual_place` with the name and coordinates, zod-validated): the server works out city and country from the coordinates: a Nearby Search at the point (50 m, then 150 m; the shared lookup cache, §17, first), using the first result's address components with the §12.1 rules (Tokyo included). If there are none (or Google fails, or Nearby Search is at its monthly cap (§17), which skips the call), the country comes from `public/geo/countries.geojson` by point-in-polygon (English name from its code) and the city stays empty. The time zone comes from the coordinates; the address stays null. It creates a `places` row with `google_place_id = null`, the chosen category, and `created_by = user` (private, §9), then the visit (source `manual`, or `photo` from Trip Photos (§11.8); no `source_input`). After that it's like any save (§11.6 steps 5–7): toasts, the pin, the map flying to it.
 5. A return visit to a manual place uses the place's id ("Add another visit", §14.4). A manual place whose last visit is deleted stays in the database, private and unused (§8).
 
 ### 11.5 Confirmation card
@@ -384,7 +433,7 @@ Shown after any successful lookup:
 
 ### 11.6 Saving (`/api/visits`)
 1. Re-validate input on the server (zod), and check the place's signature: every candidate from `/api/resolve/*` is signed on the server (HMAC-SHA256 with `RESOLVE_SIGNING_SECRET`) over all the place fields the save uses, with a 24-hour expiry. A missing, wrong, or expired signature saves nothing and shows "The map spirits aren't answering. Try again." Only the user's choices (category, date/time, precision, rating, note) are unsigned. Rating is a whole number 1–10 or none; the note is trimmed, at most 2000 characters, and an empty note is none. Without the secret, lookups and saves fail.
-   - **Existing place, by id:** a save may instead name a place that already exists by its `id` (place detail's "Add another visit", §14.4, including return visits to manual places). Nothing about the place is written, so there's no signature: the server only checks that the place exists and that the user can read it under RLS (§9), using the user's session. These visits are saved with source `manual` and no `source_input`.
+   - **Existing place, by id:** a save may instead name a place that already exists by its `id` (place detail's "Add another visit", §14.4, including return visits to manual places). Nothing about the place is written, so there's no signature: the server only checks that the place exists and that the user can read it under RLS (§9), using the user's session. These visits are saved with source `manual` (`photo` from Trip Photos, §11.8) and no `source_input`.
    - **New manual place:** a dropped pin (§11.4) sends its name and coordinates, unsigned: the place is private to its creator (§9), so made-up values only affect that user.
 2. Upsert the place by `google_place_id` with the secret key (insert if new, otherwise reuse). A save by id skips this; a dropped pin inserts its new manual place (§11.4).
 3. Compute `timezone` from coordinates and `visited_at` in UTC.
@@ -411,8 +460,54 @@ Shown after any successful lookup:
 | No such page | "The trail goes cold here." in an RPG-style box, with "Overworld" and "My Visits" choices, on the cream page with its background art |
 | No visits yet (Overworld) | RPG dialog-style hint: "Your adventure starts here. Add your first place!", as a speech bubble whose tail points at Add Visit (the sidebar item on desktop, the tab on mobile), with a "Later" button. Later hides it until the Overworld next loads; pressing Add Visit does too. |
 | No visits match filters | "No visits match these filters." |
+| Trip Photos: more than 500 photos | "That's more than 500 photos. Import your trip in smaller batches." |
+| Trip Photos: more than 150 stops | "That's more than 150 stops. Import your trip in smaller batches." |
+| Trip Photos: no usable photo | "None of these photos have a location and date." |
+| Trip Photos: some photos skipped | "Skipped 15 photos: 12 without a location or date, 3 unreadable." (only the parts that apply) |
+| Trip Photos: lookups ran out (§17) | "Out of place lookups for now. 4 stops have no match: pick one of your places or drop a pin." |
+| Trip Photos: a stop failed to save | "Couldn't save this stop. Try again." (on the stop) |
+| Leaving the review with unsaved stops | RPG dialog "Leave without saving?" + "Unsaved stops will be lost." Leave / Stay |
+| Wrong current password (§14.6) | "That's not your current password." |
 
 Messages that need acknowledgment use the RPG dialog. Non-blocking messages use toasts or alerts.
+
+### 11.8 Trip Photos import (browser, then `/api/resolve/import`)
+Adds a whole trip's visits at once from its photos. It's the fourth add mode, a bigger cousin of Upload Photo (§11.2), and it ends in a review screen instead of the confirmation card. (Numbered 11.8, not next to §11.2, so the older section numbers that `DECISIONS.md` cites stay valid.)
+
+1. **Picking:** "Trip Photos" in the desktop add bubble and the phone drawer. A "Choose photos" button opens the device's photo picker with multi-select (`<input type="file" multiple accept="image/*">`); on desktop, many files can also be dropped on the panel. The same file types as §11.2 step 1; any other file counts as unreadable (step 3). At most **500 photos** per import (one config constant); picking more reads nothing and shows "That's more than 500 photos. Import your trip in smaller batches." The privacy line from Upload Photo shows under the button.
+2. **Reading (browser only, in a Web Worker):** so the page stays responsive with 500 photos, reading runs in a Web Worker (`src/lib/trip/`). The page hands the worker the picked `File`s (they stay in the browser), and the worker reads at most a few at a time (bounded concurrency, a constant in the config): exifr reads each photo's GPS, `DateTimeOriginal`, and `OffsetTimeOriginal` with the §11.2 rules (`src/lib/photo.ts`), and the worker works out its instant (step 4). It sends back only coordinates, instants, and which files failed, plus progress for the line "Reading photos 42/300". **Photos are never uploaded, stored, or sent anywhere.** Only each stop's coordinates and local date go to the server (step 5), and its time only as a saved visit's date. Review thumbnails come from the local files only, as object URLs, never uploaded (step 7).
+3. **Skipped photos:** a photo without GPS (0,0 counts as none), without a usable date (it can't be placed in time), or that can't be read is skipped and counted. The review opens with a summary line: "Skipped 15 photos: 12 without a location or date, 3 unreadable." If no photo is usable: "None of these photos have a location and date.", and nothing else happens.
+4. **Grouping into stops** (`src/lib/trip/`, in the browser, unit tested; every threshold in one config file):
+   - A photo's instant (worked out in the worker): with `OffsetTimeOriginal`, that instant; otherwise its time read in the time zone at its coordinates (the tz lookup, loaded by the worker).
+   - Sort by instant. A photo joins the current stop if it's within **150 m** of the stop's centroid **and** within **2 hours** of the previous photo; otherwise it starts a new stop.
+   - Then merge stops at the same spot (centroids within **150 m**) on the same local day (in the zone at the centroid), recomputing the centroid.
+   - A stop's **location** is its photos' centroid. Its **time** is its first photo's, at exact-time precision, in the place's time zone; its **local date** is that time's date there.
+   - More than **150 stops** (§17): nothing is looked up, and the panel shows "That's more than 150 stops. Import your trip in smaller batches."
+5. **Lookups** (`POST /api/resolve/import`: session check; zod, strict: the import's id (step 8) and at most 150 stops, each `{ lat, lng, date }` with `date` the stop's local `YYYY-MM-DD`, and nothing else). One request per import, behind a "Finding places..." line. Each stop is answered by the first of these layers that can, cheapest first (§17):
+   - **Your places (local match):** the user's own places (under their session, RLS, with the paging helper) within 150 m of the stop, nearest first. The server puts the places in a **spatial grid index** (`src/lib/trip/`, cells at least 150 m on a side, so a stop checks only its own cell and the 8 around it, never every place). If one is within **50 m**, the nearest is preselected and the stop needs **no lookup**.
+   - **Shared result:** the remaining stops within **50 m** of each other (found with the same grid) share one lookup and its results.
+   - **Cache hit:** each remaining lookup checks the shared lookup cache (§17) at its point first.
+   - **Google:** otherwise one Nearby Search at the point, as in §11.2 step 4 (50 m, one retry at 150 m, up to 3, by distance), and the result goes into the cache.
+   - Candidates, cached or fresh, are signed as usual (§11.6 step 1) and carry their time zone.
+   - **Allowance:** lookups to Google stop when the user's import allowance or the monthly Nearby cap runs out (§17); cache hits still answer. The remaining stops get no candidates (their "your places" still show), and the review says "Out of place lookups for now. 4 stops have no match: pick one of your places or drop a pin."
+   - For each stop the response lists its "your places" and its candidates, and marks every one where the user already has a visit on the stop's local date (step 6).
+   - **Measuring:** every stop is counted once, in the layer that answered it: local match, shared result, cache hit, sent to Google, or left unmatched by a limit; Google calls made (a 150 m retry counts twice) are counted too. The response returns the counts, the review shows them under its title ("Place lookups: 12 sent to Google, 85 avoided (60 your places, 18 shared, 7 cached)"), and the server stores them as one `import_log` row (§8: counts only, no locations).
+6. **Already logged:** a stop whose match is a place where the user already has a visit on the stop's local date (matched by precision, as in My Visits' date filter, §14.3) is labelled "Already logged" and starts unchecked, so importing the same trip again doesn't duplicate visits. The label follows the chosen match; the checkbox is only preset.
+7. **Review screen** (`src/components/import/`). Phones: full screen, over the tab bar. Desktop: a large panel over the map, right of the sidebar. It's modal: nothing behind it is reachable while it's open. Title "Review trip", the skipped-photos line (step 3), then the stops in time order, each a pixel card on `surface` with:
+   - the date and time (in the place's zone), the photo count ("12 photos"), and a local thumbnail: the first photo's embedded EXIF thumbnail (read by the worker with exifr) as an object URL, or the category sprite if it has none or the browser can't show it. Object URLs are revoked when the review closes.
+   - an **include** checkbox, checked except for "Already logged" stops and stops without a match;
+   - the **match**, preselected (the nearest of the user's places within 50 m, else the first candidate) and switchable among the stop's candidates and its "Your places", each shown as on the confirmation card (sprite, name, city/country);
+   - **Category** (the 14), starting at the user's category for one of their places, otherwise the candidate's auto category;
+   - **"Drop a pin"** for a stop with no good match: the match becomes a new place at the stop's location with a required **Name** (at most 100 characters), as on a dropped pin's card (§11.4 step 3). No map placement: the photos' location is the pin;
+   - **Rating** and **Note** (§11.5), optional, collapsed behind "Add rating & note" by default.
+   - The date isn't editable here; it can be edited on the place page afterwards (§14.4).
+   - At the bottom, **"Save N visits"** (N = checked stops with a match or a named pin; disabled at 0) and Close.
+   - **Leaving with unsaved stops:** Close or Escape asks with the RPG dialog "Leave without saving?" / "Unsaved stops will be lost." (Leave / Stay). Reloading or closing the tab gets the browser's own warning.
+8. **Batch save:** the checked stops save one at a time, in time order, through `/api/visits` ("Saving 3/12"), each like a normal visit (§11.6): a signed candidate, an existing place by id (one of the user's places), or a new manual place (§11.4 step 4); with source `photo`, no `source_input`, the stop's time (exact time, in the place's zone), and its category, rating, and note. The one-category-per-place rule applies (§8, §11.6 step 4), so when several stops share a place, the last one saved sets the category. A manual-place save from an import counts as an `import` lookup, not `nearby` (§17). A failed stop shows "Couldn't save this stop. Try again." and stays in the review, checked, so "Save" retries it; saved stops leave the review and stay saved.
+   - **Idempotent:** each import has an id (a UUID made in the browser when grouping finishes), and every stop's save sends it with the stop's number. The server stores both on the visit (`import_id`, `import_stop`, §8). Before writing anything it looks for the user's visit with that import id and stop; if there is one, it answers with it as saved, so a retried save (a timeout, a lost response, a double tap) never creates a second visit or a second manual place. The unique index backs this up when two saves race.
+9. **Afterwards:** one summary toast replaces the per-visit toasts: "Trip imported!" / "N places logged, M new countries" (`success`; "1 place", "1 new country"; N counts saved visits, M the saves that were a first visit in a country, §11.6 step 5). The new pins appear and the map fits to the imported pins (like the start view, §13.1). With failures, the toast counts what was saved and the review stays open with the failed stops; otherwise it closes.
+10. As with Upload Photo, phone pickers and messaging apps often strip GPS (§11.2 step 7); those photos are skipped (step 3).
+11. **Benchmark and docs:** `pnpm bench:import` runs a synthetic 300-photo trip (fixed seed, so runs are repeatable) through the real grouping and the real lookup pipeline, with Google mocked (a fake `fetch`) and Supabase faked (the route tests' in-memory fake). It runs on Vitest (no new dependency), outside `pnpm test`, and prints photos, stops, grouping time, and Google calls made versus avoided by layer, for a cold cache and then a warm one. `docs/ARCHITECTURE.md` describes the pipeline (picker → worker → grouping → layered lookups → review → idempotent save) and the cost layers, with the benchmark's latest numbers.
 
 ---
 
@@ -538,22 +633,23 @@ Display labels: "Food", "Cafe", "Bar", "Museum", "Landmark", "Park & Nature", "S
 | `/` | **Overworld**: map + add panel |
 | `/visits` | **My Visits**: list + filters |
 | `/places/[id]` | Place detail: place info + all of the user's visits there |
+| `/profile` | **Profile**: stats + account (§14.6) |
 
 ### 14.1 Navigation
-- **Desktop:** a left sidebar styled like the RPG dialog (§16.6): a floating box inset from the viewport edges by a margin, full height minus that margin, with a dark `text` fill, an `accent` pixel border with notched corners and small pixel corner ornaments, cream text, and a solid offset shadow. On the Overworld the map runs full-bleed behind it (§13.1); on other pages it floats over the page background, and the content starts to its right. Items, top to bottom: the passport logo + "WANDERDEX" (links to `/`; hover bounces the logo with a tiny pixel sparkle, press pushes it in), then **Overworld**, **Add Visit** as its subitem (indented beneath it, joined to it by a stepped pixel connector line in `accent`, always visible, no collapse), then **My Visits**, then a divider and, at the bottom, the user's initial in a pixel frame + username, and **Log out** (RPG confirm dialog). No Profile or Settings items, and no Settings page.
-  - **RPG cursor:** a "▶" marker beside the item under the mouse, else the keyboard-focused one, else the current page's. The current page's item keeps the `primary` fill.
+- **Desktop:** a left sidebar styled like the RPG dialog (§16.6): a floating box inset from the viewport edges by a margin, full height minus that margin, with a dark `text` fill, an `accent` pixel border with notched corners and small pixel corner ornaments, cream text, and a solid offset shadow. On the Overworld the map runs full-bleed behind it (§13.1); on other pages it floats over the page background, and the content starts to its right. Items, top to bottom: the passport logo + "WANDERDEX" (links to `/`; hover bounces the logo with a tiny pixel sparkle, press pushes it in; three quick clicks open the passport secret, §15.1, so its navigation waits ~350 ms), then **Overworld**, **Add Visit** as its subitem (indented beneath it, joined to it by a stepped pixel connector line in `accent`, always visible, no collapse), then **My Visits**, then a divider and, at the bottom, the user's initial in a pixel frame + username, which is the **profile** item (links to `/profile`, §14.6), and **Log out** (RPG confirm dialog). No separate Profile item, no Settings item, and no Settings page.
+  - **RPG cursor:** a "▶" marker beside the item under the mouse, else the keyboard-focused one, else the current page's. The current page's item keeps the `primary` fill. The profile item behaves like the others (hover, press, cursor, `primary` on `/profile`).
   - **Hover and press:** hover lifts an item up-left onto a larger offset shadow; press pushes it flat (it moves by the full shadow offset and the shadow goes to 0), like the buttons. The shadow is `accent`, which shows on the dark box. Add Visit adds a call to action on hover (a pixel sparkle and a flat shine band), and on click its + icon spins round in steps.
   - **Add Visit** toggles the add bubble on the Overworld (§14.2). From another page it navigates to `/` and opens the bubble.
-- **Mobile:** bottom tab bar with **Overworld**, **My Visits**, **Add Visit** (opens the drawer), with Pixelarticons icons and 8px Press Start 2P labels. Same visual language as the sidebar: dark fill down to the bottom screen edge (safe area), an `accent` pixel border along its top edge, the active tab in `accent` with the "▶" marker beside its icon, and a press animation on tap. Tabs stay at least 44px tall. Log out lives in a small menu button (user initial) in the top-right corner of the Overworld.
+- **Mobile:** bottom tab bar with **Overworld**, **My Visits**, **Add Visit** (opens the drawer), with Pixelarticons icons and 8px Press Start 2P labels. Same visual language as the sidebar: dark fill down to the bottom screen edge (safe area), an `accent` pixel border along its top edge, the active tab in `accent` with the "▶" marker beside its icon, and a press animation on tap. Tabs stay at least 44px tall. A small **avatar button** (the user's initial in a pixel frame) in the top-right corner of the Overworld and My Visits opens `/profile`. There's no avatar menu: Log out lives in the profile's Account section (§14.6).
 
 ### 14.2 Overworld (`/`)
-- **Desktop:** the map fills the window, full-bleed behind the floating sidebar. There is no always-visible add panel. Pressing Add Visit in the sidebar opens the add panel ("Add Anything") as a speech bubble next to the sidebar, its stepped pixel tail pointing at the Add Visit item: a cream pixel card on `surface` like the pin popup (§13.4). It holds the three mode buttons as a vertical menu, with the "▶" cursor on the hovered or focused one. Choosing a mode turns the same bubble into that mode's input (e.g. the link field + Find), with a Back button to the menu. After a successful lookup the bubble closes and the confirmation card opens as a side panel over the map, on the right. The bubble closes on Escape, a click outside it, or pressing Add Visit again; closing it clears its input.
-- **Fit:** at 1280×800 (desktop) and 390×844 (iPhone), the add bubble, the add drawer, the confirmation card (with up to 3 candidates), and the map legend fit without scrolling inside. Smaller screens may scroll.
-- **Mobile:** full-screen map. A slide-up drawer holds the add panel (three mode buttons) and becomes the confirmation card after a lookup.
+- **Desktop:** the map fills the window, full-bleed behind the floating sidebar. There is no always-visible add panel. Pressing Add Visit in the sidebar opens the add panel ("Add Anything") as a speech bubble next to the sidebar, its stepped pixel tail pointing at the Add Visit item: a cream pixel card on `surface` like the pin popup (§13.4). It holds the four mode buttons as a vertical menu, with the "▶" cursor on the hovered or focused one. Choosing a mode turns the same bubble into that mode's input (e.g. the link field + Find), with a Back button to the menu. After a successful lookup the bubble closes and the confirmation card opens as a side panel over the map, on the right (Trip Photos opens its review screen instead, §11.8). The bubble closes on Escape, a click outside it, or pressing Add Visit again; closing it clears its input.
+- **Fit:** at 1280×800 (desktop) and 390×844 (iPhone), the add bubble, the add drawer, the confirmation card (with up to 3 candidates), and the map legend fit without scrolling inside. Smaller screens may scroll. The Trip Photos review (§11.8) is a list and scrolls.
+- **Mobile:** full-screen map. A slide-up drawer holds the add panel (four mode buttons, in a 2×2 grid, since four across don't fit 375px) and becomes the confirmation card after a lookup (or opens the Trip Photos review).
 
 ### 14.3 My Visits (`/visits`)
 - Sorted by `visited_at` descending (most recent visit first).
-- **Header:** "My Visits" (H1), the subtitle "Every place you've explored." (Small), and a pixel divider line ending in a small `accent` sparkle ornament. No header icon. The page uses the background art (§16.7).
+- **Header:** "My Visits" (H1), the subtitle "Every place you've explored." (Small), and a pixel divider line ending in a small `accent` sparkle ornament. No header icon. The page uses the background art (§16.7). On phones the avatar button (§14.1) sits at the right end of the title row, and the title is H2-sized there so both fit at 375px.
 - Filters, spanning the full content width, laid out as in the sheet: a row of **category** chips, then a row of compact **City**, **Country**, and **Date** controls, and a "Clear filters" action whenever any filter is set. Fits 375px with no horizontal scrolling.
   - **Category chips:** "All" + the 14 categories (§12.5), multi-select. "All" means no category filter: choosing it clears the others, and turning off the last category turns it back on. Chosen chips are `accent` with dark text, like the add flow's choices; at least 44px tall. Below 640px: All, Food, Cafe + a "More" dropdown with the other 12 (as in the sheet); wider: every chip, wrapping.
   - **City / Country:** dropdowns of the user's own distinct values, plus "All cities" / "All countries". With a country chosen, the city list shows only that country's cities, and a chosen city that isn't one of them is cleared.
@@ -580,15 +676,46 @@ Display labels: "Food", "Cafe", "Bar", "Museum", "Landmark", "Park & Nature", "S
 ### 14.5 Login / Sign up
 As in the sheet (logo, "WANDERDEX", tagline "Collect places. Build your world."), minus email fields and "Forgot password?" (§10).
 
+### 14.6 Profile (`/profile`)
+- **Reached from** the desktop sidebar's profile item and the phone avatar button (§14.1). A cream page with the background art (§16.7); desktop content sits right of the sidebar. One column, fitting 375px.
+- **Header:** the user's initial in a pixel frame (as in the sidebar), the username (H1 from `md`, H2 on phones), "Joined <Month YYYY>" (Small, from `profiles.created_at`), and the passport sprite at a whole-number scale, which is also the passport secret's trigger on every device (§15.1).
+- **Stats** (pixel tiles on `surface`): **Places discovered** (distinct places the user has visits at), **Countries** X/195, **Continents** X/7, **Total visits**, **First visit** (the place of the earliest `visited_at`, linking to its page, and that date at its precision, in its zone). With no visits: zeros, and "--" for First visit.
+- **Countries:** the 195 are the 193 UN member states plus Vatican City (`VA`) and Palestine (`PS`). For each visited place's `country_code`:
+  - one of the 195 counts as itself;
+  - a territory with a clear sovereign counts toward it (e.g. `HK`, `MO` → `CN`; `PR`, `GU` → `US`; `GF`, `RE` → `FR`);
+  - a partially recognized or disputed place (e.g. `TW`, `XK`, `EH`) counts as itself and is never merged into another state;
+  - Antarctica (`AQ`) counts toward no country; a place without a `country_code` doesn't count.
+  - The denominator stays 195 (the disputed places could push the count past it only in theory).
+- **Continents:** 7 (Africa, Antarctica, Asia, Europe, North America, Oceania, South America), from a static table by country code, using the UN geoscheme for transcontinental countries (e.g. Russia → Europe; Türkiye, Cyprus, and the Caucasus → Asia; Egypt → Africa). North America is the geoscheme's Northern America, Central America, and Caribbean. A territory counts for the continent it's on (French Guiana → South America), not its sovereign's.
+- Both tables are static data modules in `src/lib/stats/`, unit tested: exactly 195 states, every ISO 3166-1 alpha-2 code (plus `XK`) classified, and the examples above.
+- **Travel stats:**
+  - **Pins per category:** a pixel-style bar chart (plain boxes in tokens, no chart library): a row per category that has pins, most first (ties in §12.5 order), each with its 32px sprite, label, a bar proportional to the count, and the count. A place counts once, under the user's category for it (the pin's, §8).
+  - **Most revisited:** the top 5 places by the user's visit count, among places with at least 2 visits (ties: most recent visit first), each with sprite, name, city/country, and "N visits", linking to `/places/[id]`. None yet: "No return visits yet."
+  - No recents section (My Visits covers it).
+- **Account:**
+  - **Change password:** Current password, New password, Confirm new password (min 6, max 72 characters, no other rules, §10), with the warning "Passwords can't be recovered. Pick one you'll remember." The server verifies the current password first (a sign-in with it); a wrong one shows "That's not your current password." and nothing changes. Success: toast "Password changed!"; the user stays logged in.
+  - **Export data:** "Download CSV" and "Download JSON": the user's visits with place details, one row per visit, newest first: date (local, at its precision), precision, time zone, rating, note, category, source, source input, place name, address, city, country, country code, latitude, longitude, Google place id. The files are built in the browser from the user's own data, read on the server under their session (RLS, paging helper); nothing goes to any other service. Names: `wanderdex-visits-YYYY-MM-DD.csv` / `.json`.
+  - **Delete account:** an RPG dialog, "Delete your account?" / "Your visits and private places will be deleted. This can't be undone.", with a field "Type <username> to confirm". "Delete account" stays disabled until the field matches the username. The server checks the session and the typed username, then, with the admin API (secret key): notes the user's private manual places (`created_by` = user, `google_place_id` null), deletes the auth user (which cascades, §8), then deletes those places. The user is signed out and sent to `/login`. Shared Google places stay.
+  - **Log out:** the RPG confirm (§10). On phones this is the only Log out.
+- **Data:** computed on the server under the user's session (RLS), with the existing paging helper (`readAllPages`). The stats are pure functions over the rows, unit tested.
+
 ---
 
-## 15. Game touches (core build only)
+## 15. Game touches
 1. **"New place discovered!"** success toast on every save of a new place; **"Return visit!"** for a place the user already has visits at.
 2. **"First visit to a new country!"** toast on a first-in-country save.
 3. **RPG-style dialogs** for every dialog (logout, delete, edits, errors that need acknowledgment).
 4. **Game-style copy** in empty and error states (§11.7).
+5. **The passport secret** (Phase 4, §15.1).
 
-Nothing else (no sounds, XP, levels, or stamps) in the core build.
+Nothing else (no sounds, XP, levels, or stamps).
+
+### 15.1 The passport secret
+- **Triggers:** the desktop sidebar's passport logo, and the profile's passport sprite (every device, §14.6). Clicks (or taps, or Enter) within ~1.5 s of each other: the first wiggles the passport, the second flips it, the third opens the secret. Two clicks and then nothing do nothing more. The sidebar logo still links to `/`: its navigation waits ~350 ms after a click and happens only if no second click follows, so a single click still navigates. A modified click (Ctrl/Cmd, middle button) opens the link as usual and isn't counted.
+- **The secret:** a modal overlay (the dialog overlay, §16.6) where the passport (the sprite at a whole-number scale) flips open with CSS 3D transforms (`rotateY` in `steps()`, so it moves in pixel-feeling frames) into a two-page spread of cream (`background`) pages with pixel borders, pixel sparkles, and a shine (a flat band, no gradient, like Add Visit's). Left page: **Countries** X/195 and **Continents** X/7. Right page: **Pins** (places) and **First pin** (name and date). The values are the profile's (§14.6): on the profile they're already loaded; from the sidebar they're fetched when the secret opens (a Server Function sharing the profile's code), with the loading dots in their place until they arrive.
+- **Closing:** Escape, a click outside the spread, or a close button. An accessible dialog (on the Radix Dialog already installed): labelled "Passport", focus moves into it and stays there, and returns to the trigger on close.
+- **Reduced motion:** no wiggle, flip, or opening animation; the third click shows the open spread at once, and the sparkles stay still.
+- No animation library, no new dependencies, no sound. It's the one dialog not in the RPG style (§3).
 
 ---
 
@@ -671,6 +798,8 @@ The sheet's "VT223" is a typo for VT323. Line height ~1.2 for VT323, ~1.5 for Pr
 | Date & time picker | shadcn/8bitcn Calendar in a Popover + a time input + the precision control |
 | Mobile drawer | shadcn Drawer (Vaul), restyled |
 | Sidebar | Custom, in the RPG dialog style (§14.1) |
+| Bar chart (profile) | Custom: plain boxes in tokens with category sprites, no chart library (§14.6) |
+| Passport secret | Custom on the Radix Dialog, CSS 3D transforms (§15.1) |
 | Icons | Pixelarticons |
 
 ### 16.7 Assets (provided by the owner, placed in `public/sprites/`)
@@ -678,7 +807,7 @@ All are true pixel art at native size with no semi-transparent pixels; outline c
 
 | File | Size | Use |
 |---|---|---|
-| `passport.png` | 32×32 | Logo (login, signup, sidebar); favicon source |
+| `passport.png` | 32×32 | Logo (login, signup, sidebar); profile header and passport secret (§14.6, §15.1); favicon source |
 | `airplane.png` | 48×18 | Decorative header art; includes its dotted trail |
 | `pin_food.png` | 32×32 | Food pin |
 | `pin_cafe.png` | 32×32 | Cafe pin |
@@ -706,20 +835,20 @@ All are true pixel art at native size with no semi-transparent pixels; outline c
 
 The `bg/` pieces use their own soft colors (darker shades of the cream background, no outline). Like all sprite colors, these stay inside the sprites (§16.2).
 
-**Background art:** the plain cream pages (`/login`, `/signup`, `/visits`, `/places/[id]`, not the Overworld) have a fixed layer of the `bg/` pieces behind the content. It stays put while the page scrolls, takes no pointer events, is hidden from assistive tech, and never causes horizontal scrolling. Each piece is anchored to a corner of the layer as in `docs/design/background-preview.png` (laid out at 1× in `background-composite.png`), at a whole-number scale picked by the layer's size: 2×, 3× from 840×696, 4× from 1500×928. No piece is stretched or cropped to fill. On desktop app pages the layer covers the area right of the sidebar. Phones (layer narrower than 640px or shorter than 464px) get only the compass, the stamp, and a few sparkles at 2×, in the corners the page's text leaves free: the top ones beside the logo on login/signup, the bottom ones (above the tab bar) on app pages.
+**Background art:** the plain cream pages (`/login`, `/signup`, `/visits`, `/places/[id]`, `/profile`, not the Overworld) have a fixed layer of the `bg/` pieces behind the content. It stays put while the page scrolls, takes no pointer events, is hidden from assistive tech, and never causes horizontal scrolling. Each piece is anchored to a corner of the layer as in `docs/design/background-preview.png` (laid out at 1× in `background-composite.png`), at a whole-number scale picked by the layer's size: 2×, 3× from 840×696, 4× from 1500×928. No piece is stretched or cropped to fill. On desktop app pages the layer covers the area right of the sidebar. Phones (layer narrower than 640px or shorter than 464px) get only the compass, the stamp, and a few sparkles at 2×, in the corners the page's text leaves free: the top ones beside the logo on login/signup, the bottom ones (above the tab bar) on app pages.
 
-Always render with `image-rendering: pixelated` at whole-number multiples (32, 64, 96, 128px). Food, Museum, and Shopping pins are all reds and are told apart by icon only; this is accepted. (Cafe was a fourth red until its sprite was redrawn in brown, 2026-10-06.) Category sprites also replace photo thumbnails in cards and lists.
+Always render with `image-rendering: pixelated` at whole-number multiples (32, 64, 96, 128px). Food, Museum, and Shopping pins are all reds and are told apart by icon only; this is accepted. (Cafe was a fourth red until its sprite was redrawn in brown, 2026-10-06.) Category sprites also replace photo thumbnails in cards and lists, except the Trip Photos review's local thumbnails (§11.8), which fall back to the sprite.
 
 ### 16.8 Toast behavior
-Toasts auto-dismiss after ~4 s and have a close (×) button. Copy is in §11.6 and §11.7. They appear at the top; when a save shows two, both are fully visible, "New place discovered!" (or "Return visit!") first. On phones they sit left of the Overworld's avatar button, so they cover neither it nor the tab bar.
+Toasts auto-dismiss after ~4 s and have a close (×) button. Copy is in §11.6 and §11.7. They appear at the top; when a save shows two, both are fully visible, "New place discovered!" (or "Return visit!") first. On phones they sit left of the avatar button (Overworld, My Visits), so they cover neither it nor the tab bar. A Trip Photos import shows one summary toast instead of one per visit (§11.8).
 
 ### 16.9 Where the design sheet is overridden
 1. No email field, no "Email or username", no "Forgot password?" link.
 2. The signup warning is about no recovery, not "include a number".
-3. Photo thumbnails → category sprites.
+3. Photo thumbnails → category sprites (except the Trip Photos review, §11.8).
 4. H3 = 16px, not 20px. VT323 sizes bumped (body 20px, minimum 16px).
 5. Surface = `#E7D8B7`; Text = `#2D201C`; Warning `#F9CB77` added; Error stays `#D65465`.
-6. No Settings page; the sidebar shows an initial avatar + Log out.
+6. No Settings page; the sidebar shows an initial avatar (linking to the profile, §14.6) + Log out.
 7. The sheet's pink "First visit to a new country!" alert uses `visited` instead (pink-red is reserved for errors).
 8. The sheet's RPG "You found a new place! Add it to your passport?" dialog is **not** used on save; the RPG style is used for all other dialogs.
 9. The rating selector wraps to 2×5 on mobile.
@@ -732,11 +861,15 @@ Toasts auto-dismiss after ~4 s and have a close (×) button. Copy is in §11.6 a
 
 ## 17. Security and cost controls
 - Secret keys only in server code and Vercel env vars. Never prefixed `NEXT_PUBLIC_`.
-- **Google Cloud, day one:** API key restricted to Places API (New) only; a **budget alert** (e.g. $5) on the billing account; **daily quota caps** on Text Search and Nearby Search (e.g. 150/day each: `SearchTextRequest` and `SearchNearbyRequest`). Google requires a card on file, which is why these matter. While the billing account is on the Free Trial, the Places API (New) quota settings are locked; set the caps when upgrading (see `DECISIONS.md`).
+- **Google Cloud, day one:** API key restricted to Places API (New) only; a **budget alert** (e.g. $5) on the billing account; **daily quota caps** of **150/day for Text Search** (`SearchTextRequest`) and **500/day for Nearby Search** (`SearchNearbyRequest`; higher because one Trip Photos import can make up to 300 Nearby calls, §11.8). Google requires a card on file, which is why these matter. While the billing account is on the Free Trial, the Places API (New) quota settings are locked; set the caps when upgrading (see `DECISIONS.md`). The app's own monthly caps (below) stay the main protection.
 - Field masks limited as in §12.1.
-- **Per-user rate limit** on `/api/resolve/*` and on manual-place saves (they call Nearby Search, §11.4): before any work, check, then log each one in `resolve_log` (`kind` `link`, `text`, or `nearby`); reject with the rate-limit error (`rate_limited`, 429, §11.7) once the user has **60 in the last hour or 300 in the last 24 hours**. Rejected requests aren't logged.
+- **Per-user rate limit** on `/api/resolve/*` and on manual-place saves (they call Nearby Search, §11.4): before any work, check, then log each one in `resolve_log` (`kind` `link`, `text`, or `nearby`); reject with the rate-limit error (`rate_limited`, 429, §11.7) once the user has **60 in the last hour or 300 in the last 24 hours**. Rejected requests aren't logged. Only these three kinds count here; `import` rows don't.
+- **Trip import allowance** (§11.8): each lookup an import sends to Google (one per shared group of stops; its 150 m retry doesn't add one; local matches and cache hits don't count) and each manual-place save from an import (source `photo`) is logged in `resolve_log` with kind `import`. At most **150 stops per import**, and **300 import lookups per user in the last 24 hours**. The 60/hour and 300/day lookup limits above don't apply to imports, and imports don't use them up. When the allowance runs out mid-import, the remaining stops get no Google candidates (§11.8 step 5), and an import's manual-place save skips Nearby Search and uses the country-shapes fallback (as at the monthly cap, §11.4), so its pins stay saveable. Every Google call still counts toward, and is stopped by, the monthly SKU caps below.
 - **Global monthly cap per Google SKU** (built): **4,500 calls/month** each for Text Search and Nearby Search, per calendar month (UTC), counting actual Google API calls across all users in `google_call_log` (a Nearby retry at 150 m counts as two calls; a manual-place save's Nearby calls count too). Before each Google call, if its SKU has reached the cap, the call is skipped and a lookup stops with the rate-limit error; a manual-place save instead uses its country-shapes fallback (§11.4), so pins stay saveable. Otherwise the call is logged and made. Google's free allowance is 5,000 per SKU; the margin covers simultaneous requests slightly overshooting.
-- All limits live in one config file, `src/lib/rate-limits.ts`.
+- **Shared lookup cache** (Phase 4): every Nearby Search (Trip Photos, Upload Photo, a dropped pin's city and country, and a coordinates-only link, which use the same lookup) checks `nearby_cache` (§8) before calling Google. The key is the point's cell: latitude and longitude rounded to a fixed step (a config constant, about 20 m). A hit younger than **30 days** answers without a Google call, with its candidates re-sorted by distance to the actual point and signed fresh (the cache never holds signatures); an empty result (nothing within 150 m) is cached too. A miss calls Google (50 m, then 150 m) and upserts the cell with the result. Older rows are ignored and replaced; each cache write also deletes rows past 30 days. Server only, with the secret key; no user id is stored. A hit makes no Google call, so it isn't logged in `google_call_log`, isn't stopped by the monthly cap, and doesn't use the import allowance. The per-user lookup limits still count requests to `/api/resolve/*` and pin saves, hit or miss. Text Search isn't cached.
+- **Cost measurement:** each Trip Photos import stores how its stops were answered (local match, shared result, cache hit, Google, unmatched) and its Google calls in `import_log` (§8, §11.8 step 5). `pnpm bench:import` reports the same for a synthetic trip (§11.8 step 11).
+- All limits live in one config file, `src/lib/rate-limits.ts` (the import limits too). Trip Photos' photo limit, reading concurrency, and grouping, matching, grid, and cache-cell values live in their own config file in `src/lib/trip/` (§11.8).
+- Account deletion uses the admin API with the secret key, on the server only, after the session check (§14.6).
 - All route handlers check the Supabase session and validate input with zod.
 - RLS on every table (§9).
 - Photos never leave the browser.
@@ -758,6 +891,8 @@ Toasts auto-dismiss after ~4 s and have a close (×) button. Copy is in §11.6 a
   - Category mapping: each category, suffix rules, `primaryType` priority, fallback to Other.
   - Dates: precision formatting, month/date storage at 12:00 local, EXIF with and without offset, time zone conversion.
   - Username validation.
+  - Trip Photos (§11.8): skipping (no GPS, no date, unreadable), grouping into stops (distance, time gap, same-day merge, time order, centroid, first photo's time), the grid index (same answers as comparing every pair, including across cell edges and at high latitudes), sharing lookups within 50 m, the local-first match, the lookup cache (cell rounding, hit, miss, 30-day expiry, re-sorting, empty results), the per-layer counts, "Already logged" by precision, and an idempotent save (a repeated save of one stop leaves one visit and one manual place).
+  - Country and continent tables (§14.6): exactly 195 states, every ISO 3166-1 code classified, the listed examples; the profile stats.
 - **Manual device checklist (every phase):**
   - Phone at 375px (Chrome and Safari) and desktop (Chrome).
   - Add via each mode, including a photo with GPS and one without.
@@ -765,6 +900,7 @@ Toasts auto-dismiss after ~4 s and have a close (×) button. Copy is in §11.6 a
   - Every dialog uses the RPG style; toasts show the correct colors and copy.
   - Tap targets ≥44px; no horizontal scrolling on mobile.
   - Log out and back in; data persists.
+  - Phase 4: a Trip Photos import from the phone's own photo picker (iPhone Safari included) and by drag-and-drop on desktop; the profile, its account actions, and the passport secret, with and without reduced motion.
 - **Performance:** Overworld usable within ~3 s on a mid-range phone; smooth panning with ~300 places.
 
 ---
@@ -804,17 +940,36 @@ The owner is in a rush. Target roughly **two weeks** for the core build; these a
 - README with setup steps (PowerShell commands).
 - **Done when:** the app matches the design sheet (with §16.9 overrides) and passes the QA checklist.
 
+### Phase 4: Trip Photos, Profile, passport secret: not started
+- **4.1 Trip Photos: reading, grouping, and the review screen** (§11.8 steps 1–4 and 7), local only, no lookups yet. **First:** a quick check on the owner's iPhone that a multi-select from Safari's picker keeps GPS (single photos already do, §22). Then the fourth mode, multi-select and drop, the reading Web Worker with bounded concurrency and progress, skipping and its summary, grouping, the review with stops, thumbnails, and the leave warning; and the benchmark's synthetic trip generator with its grouping report.
+- **4.2 Trip Photos: lookups and saving** (§11.8 steps 5–6 and 8–11, §17), in this order:
+  1. The migration: `nearby_cache`, `import_log`, and `visits.import_id` / `import_stop` with their unique index (§8, §9). Stop until the owner confirms it's applied.
+  2. `/api/resolve/import`: the grid index for local matches and shared results, the import allowance, "Already logged", and the per-layer counts stored in `import_log`.
+  3. The shared lookup cache, used by every Nearby Search (imports, Upload Photo, dropped pins).
+  4. Idempotent batch save, the lookup counts in the review, the summary toast, and fitting the map to the new pins.
+  5. The benchmark's lookup report (cold and warm cache) and `docs/ARCHITECTURE.md`.
+- **4.3 Profile: stats and navigation** (§14.6, §14.1): the page, its stats and travel stats, the country and continent tables, the sidebar's profile item, the phone avatar button on the Overworld and My Visits (the avatar menu goes away).
+- **4.4 Profile: account actions** (§14.6): change password, export data, delete account, log out. Confirm that `google_call_log.user_id` is `on delete set null` in the live database (it is in `20261004000000_google_call_log.sql`); a migration is needed only if it isn't.
+- **4.5 Passport secret** (§15.1).
+- **Done when:**
+  - A trip's photos import as visits on phone and desktop, with no photo data leaving the device (checked in the network log, as in Phase 2) and no duplicates on re-import ("Already logged") or on a retried save (idempotency).
+  - The page stays responsive while 500 photos are read: no main-thread task over 100 ms in a performance trace.
+  - Each import's calls made versus avoided show in its review and land in `import_log`; a repeat lookup at a cached spot makes no Google call.
+  - `pnpm bench:import` prints the synthetic 300-photo report (cold and warm cache), and `docs/ARCHITECTURE.md` describes the pipeline with those numbers.
+  - The profile's numbers match the user's data, every account action works end to end, and the secret opens from both triggers, on phone and desktop.
+  - `pnpm lint`, `pnpm build`, and `pnpm test` pass.
+
 ---
 
 ## 21. Later (out of scope for the core build)
-Passport stamps · stats page · timeline replay · saving photos to entries · importing a whole trip's photos at once (grouping by time and place) · AI vision to rank photo candidates · sound effects (off by default) · XP / levels · dark mode · optional recovery email.
+Passport stamps · timeline replay · saving photos to entries · AI vision to rank photo candidates · sound effects (off by default) · XP / levels · dark mode · optional recovery email.
 
 ---
 
 ## 22. Known risks
 | Risk | Mitigation |
 |---|---|
-| Google terms gray area (storing Places data) | Accepted for a personal project; revisit before any public launch |
+| Google terms gray area (storing Places data, §1.3), now including the shared Nearby cache (`nearby_cache`, 30-day expiry, §17), which Google's terms are stricter about than storing place IDs | Accepted for a personal project; revisit before any public launch (the cache can be dropped without changing behavior, only cost) |
 | Google/Apple change link formats | Parser isolated in `lib/links`, unit tested, graceful fallback to Type Location |
 | Apple changes its place page or objects to reading it (§11.1) | Falls back to Type Location; accepted for a personal project |
 | Photos often lack GPS | Clear "no location data" path; the date is still used |
@@ -825,6 +980,10 @@ Passport stamps · stats page · timeline replay · saving photos to entries · 
 | Pixelated map unreadable on some phones | Hybrid map: pixelated only at world zoom, full resolution when zoomed in (§13.1); block size and threshold picked on a real phone |
 | Crisp world-view borders rely on a negative `line-blur`, which MapLibre's style spec doesn't allow | MapLibre pinned at 5.x. After any MapLibre upgrade, check the world-view borders; if they break, fall back to plain 1-map-pixel lines |
 | Google bill | Budget alert, quota caps, minimal field masks, per-user rate limits |
+| iPhone Safari's photo picker may strip GPS when many photos are picked at once | Single photos from the Photos library keep GPS (owner checked); a multi-select check is the first step of Phase 4.1; skipped photos are counted and reported (§11.8) |
+| One big import can make up to 300 Nearby calls (150 stops, each with a retry) | Google's daily Nearby cap is 500 (§17); local matches, shared lookups, and the cache cut calls; stops past a limit get no match and can still be pinned |
+| Reading hundreds of photos on a phone | Metadata only, a few files at a time, at most 500 per import |
+| Account deletion can't be undone | RPG confirm with the username typed in (§14.6) |
 
 ---
 
