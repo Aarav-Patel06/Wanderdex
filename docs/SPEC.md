@@ -954,7 +954,7 @@ The owner is in a rush. Target roughly **two weeks** for the core build; these a
 - **4.5 Passport secret** (§15.1).
 - **Done when:**
   - A trip's photos import as visits on phone and desktop, with no photo data leaving the device (checked in the network log, as in Phase 2) and no duplicates on re-import ("Already logged") or on a retried save (idempotency).
-  - The page stays responsive while 500 photos are read: no main-thread task over 100 ms in a performance trace.
+  - The page stays responsive while 500 photos are read: no app-owned main-thread task over 100 ms while reading photos, in a performance trace. (The browser's own file-list work at the pick and the one-time review open were measured and accepted, `DECISIONS.md` 2026-10-06.)
   - Each import's calls made versus avoided show in its review and land in `import_log`; a repeat lookup at a cached spot makes no Google call.
   - `pnpm bench:import` prints the synthetic 300-photo report (cold and warm cache), and `docs/ARCHITECTURE.md` describes the pipeline with those numbers.
   - The profile's numbers match the user's data, every account action works end to end, and the secret opens from both triggers, on phone and desktop.
