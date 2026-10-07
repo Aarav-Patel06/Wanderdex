@@ -2,7 +2,7 @@ import "@/test/file-reader";
 
 import { describe, expect, it } from "vitest";
 
-import { formatTaken, isPhotoFile, photoInfo, photoVisited, readPhoto, readThumbnail } from "@/lib/photo";
+import { formatTaken, isDecodableFile, isPhotoFile, photoInfo, photoVisited, readPhoto, readThumbnail } from "@/lib/photo";
 import { CountingBlob, farGpsTiff, jpeg, png, raw, tiff, TOKYO, TOKYO_GPS, webp } from "@/test/exif";
 
 describe("readPhoto", () => {
@@ -228,15 +228,43 @@ describe("partial reads", () => {
   });
 });
 
+describe("isDecodableFile", () => {
+  it("takes the formats a browser may decode, by type or by extension when untyped", () => {
+    for (const type of ["image/jpeg", "image/png", "image/webp", "image/heic", "image/HEIF"]) {
+      expect(isDecodableFile({ name: "photo", type })).toBe(true);
+    }
+    expect(isDecodableFile({ name: "IMG_0001.HEIC", type: "" })).toBe(true);
+    expect(isDecodableFile({ name: "IMG_0001.jpg", type: "application/octet-stream" })).toBe(true);
+  });
+
+  it("leaves out RAW files, which browsers don't decode", () => {
+    expect(isDecodableFile({ name: "IMG_0001.DNG", type: "image/DNG" })).toBe(false);
+    expect(isDecodableFile({ name: "IMG_0001.dng", type: "image/x-adobe-dng" })).toBe(false);
+    expect(isDecodableFile({ name: "DSC_0001.NEF", type: "" })).toBe(false);
+    expect(isDecodableFile({ name: "notes.txt", type: "text/plain" })).toBe(false);
+  });
+});
+
 describe("readThumbnail", () => {
   // Stand-in JPEG bytes: exifr hands back whatever the EXIF thumbnail tags point at.
   const thumb = new Uint8Array([0xff, 0xd8, 1, 2, 3, 4, 5, 6, 7, 8, 0xff, 0xd9]);
 
   it("returns a JPEG's embedded EXIF thumbnail, reading only its first chunk", async () => {
     const file = new CountingBlob([jpeg(tiff({ dateTime: "2025:03:12 15:45:30", thumbnail: thumb })), new Uint8Array(10_000_000)]);
-    expect(await readThumbnail(file)).toEqual(thumb);
+    expect(await readThumbnail(file)).toEqual({ bytes: thumb, orientation: 1 });
     expect(file.wholeReads).toBe(0);
-    expect(file.sliced).toBeLessThanOrEqual(65_536);
+    // The first chunk, for the thumbnail and again for the orientation.
+    expect(file.sliced).toBeLessThanOrEqual(2 * 65_536);
+  });
+
+  it("comes with the main image's orientation, which the thumbnail itself doesn't carry", async () => {
+    // A portrait phone photo: stored sideways, Orientation 6 (turn 90° clockwise).
+    const portrait = jpeg(tiff({ dateTime: "2025:03:12 15:45:30", orientation: 6, thumbnail: thumb }));
+    expect(await readThumbnail(portrait)).toEqual({ bytes: thumb, orientation: 6 });
+    for (const orientation of [0, 9]) {
+      const invalid = jpeg(tiff({ dateTime: "2025:03:12 15:45:30", orientation, thumbnail: thumb }));
+      expect((await readThumbnail(invalid))?.orientation).toBe(1);
+    }
   });
 
   it("is null without one: no thumbnail, a DNG, a PNG, or not a photo", async () => {

@@ -23,3 +23,10 @@ export const POST_BATCH = 25;
 export const JOIN_RADIUS_M = 150;
 export const JOIN_GAP_MS = 2 * 60 * 60 * 1000;
 export const MERGE_RADIUS_M = 150;
+
+// Review thumbnails made from the photo itself, for stops whose first photo has no EXIF thumbnail
+// (SPEC §11.8 step 7): THUMBNAIL_SIZE px square (64 CSS px at 3× device pixels), at most
+// THUMBNAIL_CONCURRENCY decoding at once. Decoding holds the whole photo's pixels while it runs
+// (48 MB for 12 MP), so only a few at a time.
+export const THUMBNAIL_SIZE = 192;
+export const THUMBNAIL_CONCURRENCY = 2;

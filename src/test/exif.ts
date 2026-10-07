@@ -1,8 +1,10 @@
 // Real EXIF bytes for tests, so exifr itself runs: a little-endian TIFF with an Exif IFD
 // (DateTimeOriginal, OffsetTimeOriginal) and a GPS IFD, wrapped as a JPEG APP1 segment, a PNG eXIf
-// chunk, or a WebP EXIF chunk. No image data: exifr only reads the metadata. `thumbnail` adds an
-// IFD1 holding those bytes as the embedded JPEG thumbnail.
+// chunk, or a WebP EXIF chunk. No image data: exifr only reads the metadata. `orientation` adds
+// IFD0's Orientation tag; `thumbnail` adds an IFD1 holding those bytes as the embedded JPEG
+// thumbnail.
 const ASCII = 2;
+const SHORT = 3;
 const LONG = 4;
 const RATIONAL = 5;
 
@@ -13,11 +15,13 @@ export function tiff({
   dateTime,
   offset,
   gps,
+  orientation,
   thumbnail,
 }: {
   dateTime?: string;
   offset?: string;
   gps?: { latRef: string; lat: Dms; lngRef: string; lng: Dms };
+  orientation?: number;
   thumbnail?: Uint8Array;
 }) {
   const exif: Entry[] = [];
@@ -32,7 +36,7 @@ export function tiff({
       ]
     : [];
   const ifdSize = (count: number) => 2 + count * 12 + 4;
-  const pointers = Number(exif.length > 0) + Number(gpsEntries.length > 0);
+  const pointers = Number(orientation !== undefined) + Number(exif.length > 0) + Number(gpsEntries.length > 0);
   const ifd0At = 8;
   const exifAt = ifd0At + ifdSize(pointers);
   const gpsAt = exifAt + (exif.length ? ifdSize(exif.length) : 0);
@@ -75,6 +79,8 @@ export function tiff({
   }
 
   const ifd0: Entry[] = [];
+  // A SHORT fits in the entry's value field, little-endian, like the LONGs.
+  if (orientation !== undefined) ifd0.push([0x0112, SHORT, orientation]);
   if (exif.length) ifd0.push([0x8769, LONG, exifAt]);
   if (gpsEntries.length) ifd0.push([0x8825, LONG, gpsAt]);
   writeIfd(ifd0At, ifd0);

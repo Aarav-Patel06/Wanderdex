@@ -10,6 +10,12 @@
   contain-intrinsic-size: auto 280px;
 }
 
+/* An EXIF thumbnail is turned upright by the photo's orientation (trip-review.tsx), so the browser
+   mustn't also apply any orientation the thumbnail's own bytes might carry. */
+.trip-thumbnail {
+  image-orientation: none;
+}
+
 /* The include checkbox: a real (visually hidden) checkbox and a 28px pixel box beside its label,
    in a 44px-tall label. The box takes the focus ring, since the input can't show one. */
 .trip-check-box {

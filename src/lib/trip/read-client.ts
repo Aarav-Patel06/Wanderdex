@@ -1,3 +1,4 @@
+import type { Thumbnail } from "@/lib/photo";
 import { POST_BATCH } from "@/lib/trip/config";
 import type { TripPlan } from "@/lib/trip/group";
 import type { ReadBatch, ReadMessage } from "@/lib/trip/pipeline";
@@ -13,7 +14,7 @@ export type ReadWorker = {
   onerror: ((event: Event) => void) | null;
 };
 
-export type TripRead = { plan: TripPlan; thumbnails: (Uint8Array | null)[] };
+export type TripRead = { plan: TripPlan; thumbnails: (Thumbnail | null)[] };
 
 export type TripReading = {
   // The plan (stops, or why there are none) and each stop's thumbnail. Rejects if the worker fails.

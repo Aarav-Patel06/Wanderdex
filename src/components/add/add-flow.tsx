@@ -276,7 +276,7 @@ export function AddFlow() {
       if (request !== requests.current) return;
       if (plan.kind === "stops") {
         // A transition, so React yields while rendering the review (SPEC §20's 100 ms).
-        startTransition(() => setReview({ id: randomUuid(), stops: plan.stops, skipped: plan.skipped, thumbnails }));
+        startTransition(() => setReview({ id: randomUuid(), files, stops: plan.stops, skipped: plan.skipped, thumbnails }));
         close();
       } else {
         const text = plan.kind === "too_many_stops" ? TOO_MANY_STOPS : plan.kind === "no_usable" ? NO_USABLE_PHOTO : TOO_MANY_PHOTOS;

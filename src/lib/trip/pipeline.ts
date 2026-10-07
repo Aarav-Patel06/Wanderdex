@@ -1,4 +1,4 @@
-import { loadExifr, readThumbnail } from "@/lib/photo";
+import { loadExifr, readThumbnail, type Thumbnail } from "@/lib/photo";
 import { planTrip, type TripPlan } from "@/lib/trip/group";
 import { readAll, readTripPhoto, type ZoneAt } from "@/lib/trip/read";
 
@@ -7,12 +7,12 @@ import { readAll, readTripPhoto, type ZoneAt } from "@/lib/trip/read";
 
 // The protocol. The page sends the picked files in batches (POST_BATCH), each with the total; once
 // the worker has them all it reads them, answering with progress after each photo, then the plan
-// and one thumbnail (JPEG bytes, or null) per stop. Only coordinates, instants, and thumbnails come
-// back, never the files. An error means the photo reader's code didn't load.
+// and one EXIF thumbnail (JPEG bytes and the photo's orientation, or null) per stop. Only
+// coordinates, instants, and thumbnails come back, never the files. An error means the photo reader's code didn't load.
 export type ReadBatch = { files: File[]; total: number };
 export type ReadMessage =
   | { type: "progress"; done: number; total: number }
-  | { type: "done"; plan: TripPlan; thumbnails: (Uint8Array | null)[] }
+  | { type: "done"; plan: TripPlan; thumbnails: (Thumbnail | null)[] }
   | { type: "error" };
 
 // Collects the batches, in the order sent, and calls onAll once with every file.
@@ -47,5 +47,5 @@ export async function handleReadRequest(
     plan.kind === "stops"
       ? await readAll(plan.stops, (stop) => readThumbnail(files[stop.photos[0]]), concurrency, () => {})
       : [];
-  post({ type: "done", plan, thumbnails }, thumbnails.flatMap((bytes) => (bytes ? [bytes.buffer] : [])));
+  post({ type: "done", plan, thumbnails }, thumbnails.flatMap((thumbnail) => (thumbnail ? [thumbnail.bytes.buffer] : [])));
 }

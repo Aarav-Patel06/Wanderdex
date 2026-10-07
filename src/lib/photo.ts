@@ -23,8 +23,20 @@ const PHOTO_EXTENSION = /\.(jpe?g|png|hei[cf]|webp|dng|cr2|nef|arw|pef|orf|rw2)$
 export function isPhotoFile({ name, type: rawType }: { name: string; type: string }) {
   const type = rawType.toLowerCase();
   if (PHOTO_TYPES.includes(type)) return true;
-  const untyped = type === "" || type === "application/octet-stream" || type.startsWith("image/x-");
-  return untyped && PHOTO_EXTENSION.test(name);
+  return untyped(type) && PHOTO_EXTENSION.test(name);
+}
+
+const untyped = (type: string) => type === "" || type === "application/octet-stream" || type.startsWith("image/x-");
+
+// The photos a browser may decode, for a Trip Photos thumbnail made from the image itself (SPEC
+// §11.8 step 7): JPEG, PNG, WebP, and HEIC (Safari decodes it; elsewhere decoding fails and the
+// sprite stays). Not RAW: browsers don't decode it, and a ProRAW DNG is too big to read whole.
+const DECODABLE_TYPES = ["image/jpeg", "image/png", "image/heic", "image/heif", "image/webp"];
+const DECODABLE_EXTENSION = /\.(jpe?g|png|hei[cf]|webp)$/i;
+
+export function isDecodableFile({ name, type: rawType }: { name: string; type: string }) {
+  const type = rawType.toLowerCase();
+  return DECODABLE_TYPES.includes(type) || (untyped(type) && DECODABLE_EXTENSION.test(name));
 }
 
 // Only these tags are read. reviveValues: false keeps the dates as the raw EXIF strings (exifr
@@ -53,15 +65,25 @@ export async function readPhoto(file: Blob): Promise<PhotoInfo | null> {
   }
 }
 
+// An EXIF thumbnail: its JPEG bytes, and the photo's EXIF Orientation (1–8, 1 = upright). The
+// thumbnail is stored the way the camera's sensor saw it and carries no orientation of its own,
+// so it shows sideways unless it's turned by the main image's.
+export type Thumbnail = { bytes: Uint8Array; orientation: number };
+
 // The photo's embedded EXIF thumbnail (a small JPEG that most cameras and phones write into a JPEG's
 // EXIF), read by chunks like readPhoto, or null: none, or a format exifr can't take one from
 // (HEIC, PNG, WebP, and DNG, whose preview isn't stored as an EXIF thumbnail).
-export async function readThumbnail(file: Blob): Promise<Uint8Array | null> {
+export async function readThumbnail(file: Blob): Promise<Thumbnail | null> {
   const exifr = await loadExifr();
   try {
     const thumbnail = await exifr.thumbnail(file);
-    // A copy, so it has a buffer of its own (the worker transfers it to the page).
-    return thumbnail?.length ? new Uint8Array(thumbnail) : null;
+    if (!thumbnail?.length) return null;
+    const orientation = (await exifr.orientation(file)) ?? 1;
+    return {
+      // A copy, so it has a buffer of its own (the worker transfers it to the page).
+      bytes: new Uint8Array(thumbnail),
+      orientation: orientation >= 1 && orientation <= 8 ? orientation : 1,
+    };
   } catch {
     return null;
   }

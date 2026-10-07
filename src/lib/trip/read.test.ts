@@ -143,7 +143,7 @@ describe("handleReadRequest", () => {
       timezone: "Asia/Tokyo",
       localDate: "2025-03-12",
     });
-    expect(last.thumbnails).toEqual([thumb]);
+    expect(last.thumbnails).toEqual([{ bytes: thumb, orientation: 1 }]);
   });
 
   it("sends back only coordinates, times, counts, and thumbnails, never file data", async () => {
