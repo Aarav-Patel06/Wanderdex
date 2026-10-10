@@ -1,11 +1,6 @@
 // Trip Photos (SPEC §11.8): its photo limit, reading concurrency, and grouping, matching, grid,
 // and cache values, all in one place. The per-user import limits are in lib/rate-limits.
 
-// Until the owner has tested Phase 4.2 and turns it on, the mode shows only in development builds
-// (`next dev`). Next inlines NODE_ENV, so in production builds the flag is false and the mode
-// never shows (its code is still bundled: Turbopack doesn't fold an imported constant).
-export const TRIP_PHOTOS_ENABLED = process.env.NODE_ENV === "development";
-
 // At most this many photos per import; picking more reads nothing (SPEC §11.8 step 1).
 export const MAX_PHOTOS = 500;
 

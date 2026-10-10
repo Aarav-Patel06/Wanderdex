@@ -14,7 +14,6 @@ import { Alert, AlertDescription } from "@/components/ui/8bit/alert";
 import { Button } from "@/components/ui/8bit/button";
 import { Input } from "@/components/ui/8bit/input";
 import { Label } from "@/components/ui/8bit/label";
-import { TRIP_PHOTOS_ENABLED } from "@/lib/trip/config";
 import { cn } from "@/lib/utils";
 
 export type AddMode = "link" | "text" | "photo" | "trip";
@@ -41,18 +40,17 @@ const FIELDS = {
   },
 } as const;
 
-// Trip Photos only in development builds until it's finished (lib/trip/config).
 const MODES = [
   { mode: "link", label: "Paste Link", Icon: LinkIcon },
   { mode: "photo", label: "Upload Photo", Icon: ImageIcon },
   { mode: "text", label: "Type Location", Icon: Pencil },
-  ...(TRIP_PHOTOS_ENABLED ? [{ mode: "trip", label: "Trip Photos", Icon: Images } as const] : []),
+  { mode: "trip", label: "Trip Photos", Icon: Images },
 ] as const;
 
 // The add panel's content (SPEC §11): the mode buttons and the chosen mode's input, then
 // "Can't find it? Drop a pin" (SPEC §11.4). Two layouts, with the same state:
-// - "grid" (the mobile drawer): the modes in a grid (three across, or 2×2 with four, since four
-//   don't fit across 375px, SPEC §14.2), the chosen one's input below them.
+// - "grid" (the mobile drawer): the modes in a 2×2 grid (four don't fit across 375px, SPEC §14.2),
+//   the chosen one's input below them.
 // - "list" (the desktop speech bubble): the modes as a vertical menu with the RPG cursor (▶) on
 //   the hovered or focused one; choosing one swaps the menu for its input, with a way back.
 //   Upload Photo and Trip Photos also take dropped files there.
@@ -126,7 +124,7 @@ export function AddPanel({
         <div
           role="group"
           aria-label="How to add"
-          className={cn("grid gap-button-group px-1.5", MODES.length === 4 ? "grid-cols-2" : "grid-cols-3")}
+          className="grid grid-cols-2 gap-button-group px-1.5"
         >
           {MODES.map(({ mode: option, label, Icon }) => (
             <ModeButton key={option} pressed={mode === option} disabled={loading} onClick={() => onMode(option)}>

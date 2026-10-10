@@ -2,7 +2,7 @@
 
 A personal travel passport styled like a retro 8-bit game. Paste a Google or Apple Maps link, type a place, or pick a photo, and it lands as a pixel pin on your Overworld map.
 
-Built with Next.js, Supabase, MapLibre, Google Places, and Gemini. The full spec is in [`docs/SPEC.md`](docs/SPEC.md); choices made along the way are in [`docs/DECISIONS.md`](docs/DECISIONS.md).
+Built with Next.js, Supabase, MapLibre, Google Places, and Gemini. The full spec is in [`docs/SPEC.md`](docs/SPEC.md); choices made along the way are in [`docs/DECISIONS.md`](docs/DECISIONS.md); the Trip Photos import pipeline and its cost layers, with benchmark numbers, are in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## Prerequisites
 

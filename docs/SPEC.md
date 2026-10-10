@@ -1,7 +1,7 @@
 # Wanderdex: Project Specification
 
 **Version:** 1.3 (2026-10-06)
-**Status:** Core build (Phases 1–3) done and live at `wanderdex.vercel.app`. Phase 4 (Trip Photos import, Profile, passport secret; §20): Trip Photos (4.1, 4.2) built, in development builds only until the owner turns it on; the rest is specified, not built. Everything in §21 "Later" is out of scope.
+**Status:** Core build (Phases 1–3) done and live at `wanderdex.vercel.app`. Phase 4 (Trip Photos import, Profile, passport secret; §20): Trip Photos (4.1, 4.2) done and live; the rest is specified, not built. Everything in §21 "Later" is out of scope.
 **Owner:** Aarav Patel. Personal student / portfolio project.
 
 ---
@@ -946,9 +946,9 @@ The owner is in a rush. Target roughly **two weeks** for the core build; these a
 - README with setup steps (PowerShell commands).
 - **Done when:** the app matches the design sheet (with §16.9 overrides) and passes the QA checklist.
 
-### Phase 4: Trip Photos, Profile, passport secret: in progress (4.1 and 4.2 built; Trip Photos still dev-only)
-- **4.1 Trip Photos: reading, grouping, and the review screen** (§11.8 steps 1–4 and 7), local only, no lookups yet. Every push deploys to production, so the mode shows only in development builds: one flag, `TRIP_PHOTOS_ENABLED` in `src/lib/trip/config.ts` (`NODE_ENV === "development"`), removed when the owner has tested 4.2 and turns the mode on. With the flag off, the drawer keeps its three modes side by side. **First:** a quick check on the owner's iPhone that a multi-select from Safari's picker keeps GPS (single photos already do, §22). Done 2026-10-06: 38 picked, all 36 regular photos read with location and date; the 2 ProRAW DNGs were refused by the file-type check, now supported (§11.2). Then the fourth mode, multi-select and drop, the reading Web Worker with bounded concurrency and progress, skipping and its summary, grouping, the review with stops, thumbnails, and the leave warning; and the benchmark's synthetic trip generator with its grouping report.
-- **4.2 Trip Photos: lookups and saving** (§11.8 steps 5–6 and 8–11, §17), in this order:
+### Phase 4: Trip Photos, Profile, passport secret: in progress (4.1 and 4.2 done)
+- **4.1 Trip Photos: reading, grouping, and the review screen** (§11.8 steps 1–4 and 7): done (2026-10-10). Local only, no lookups yet. Every push deploys to production, so the mode showed only in development builds behind one flag, `TRIP_PHOTOS_ENABLED` (`NODE_ENV === "development"`), until the owner had tested 4.2; removed 2026-10-10, so every build shows four modes. **First:** a quick check on the owner's iPhone that a multi-select from Safari's picker keeps GPS (single photos already do, §22). Done 2026-10-06: 38 picked, all 36 regular photos read with location and date; the 2 ProRAW DNGs were refused by the file-type check, now supported (§11.2). Then the fourth mode, multi-select and drop, the reading Web Worker with bounded concurrency and progress, skipping and its summary, grouping, the review with stops, thumbnails, and the leave warning; and the benchmark's synthetic trip generator with its grouping report.
+- **4.2 Trip Photos: lookups and saving** (§11.8 steps 5–6 and 8–11, §17): done (2026-10-10), in this order:
   1. The migration: `nearby_cache`, `import_log`, and `visits.import_id` / `import_stop` with their unique index (§8, §9). Stop until the owner confirms it's applied.
   2. `/api/resolve/import`: the grid index for local matches and shared results, the import allowance, "Already logged", and the per-layer counts stored in `import_log`.
   3. The shared lookup cache, used by every Nearby Search (imports, Upload Photo, dropped pins).
