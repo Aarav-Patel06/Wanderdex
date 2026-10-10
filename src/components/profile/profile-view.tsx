@@ -86,7 +86,7 @@ export function ProfileView({
         )}
       </section>
 
-      <AccountSection />
+      <AccountSection username={username} />
     </section>
   );
 }

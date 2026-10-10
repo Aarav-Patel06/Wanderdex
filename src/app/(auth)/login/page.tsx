@@ -5,11 +5,13 @@ import { LoginForm } from "@/components/auth/login-form";
 
 export const metadata: Metadata = { title: "Log in · Wanderdex" };
 
-export default function LoginPage() {
+// ?deleted: the user just deleted their account (SPEC §14.6).
+export default async function LoginPage({ searchParams }: PageProps<"/login">) {
+  const { deleted } = await searchParams;
   return (
     <>
       <AuthHeader />
-      <LoginForm />
+      <LoginForm notice={deleted !== undefined ? "Account deleted." : undefined} />
     </>
   );
 }

@@ -1,7 +1,7 @@
 # Wanderdex: Project Specification
 
 **Version:** 1.3 (2026-10-06)
-**Status:** Core build (Phases 1–3) done and live at `wanderdex.vercel.app`. Phase 4 (Trip Photos import, Profile, passport secret; §20): Trip Photos (4.1, 4.2) and the profile's stats and navigation (4.3) done; the rest is specified, not built. Everything in §21 "Later" is out of scope.
+**Status:** Core build (Phases 1–3) done and live at `wanderdex.vercel.app`. Phase 4 (Trip Photos import, Profile, passport secret; §20): Trip Photos (4.1, 4.2), the profile's stats and navigation (4.3), and its account actions (4.4) done; the passport secret (4.5) is specified, not built. Everything in §21 "Later" is out of scope.
 **Owner:** Aarav Patel. Personal student / portfolio project.
 
 ---
@@ -131,7 +131,9 @@ Browser (Next.js client)
         ▼
 Next.js server (Vercel)
  ├─ Pages + Server Functions → read the user's data with their session (RLS); login, signup, logout;
- │                             profile stats, export data, change password, delete account (admin API)
+ │                             profile stats, change password
+ ├─ /api/export          → the user's visits with their places, for the profile's downloads (§14.6)
+ ├─ /api/account (DELETE) → delete account: session, typed username, then the admin API (§14.6)
  ├─ /api/resolve/link    → expand link, parse, Google Text Search
  ├─ /api/resolve/text    → Gemini parse, Google Text Search
  ├─ /api/resolve/nearby  → Google Nearby Search (photo GPS / manual pin)
@@ -191,6 +193,8 @@ wanderdex/
 │  │  ├─ dates.ts         # precision + time zone logic (unit tested)
 │  │  ├─ photo.ts         # exifr reading
 │  │  ├─ nearby-cache.ts  # the shared Nearby Search cache (§17, unit tested)
+│  ├─ export.ts, export-file.ts # export rows (server) and the CSV/JSON files (browser) (§14.6, unit tested)
+│  ├─ account.ts       # delete account: the username check and the delete order (§14.6, unit tested)
 │  │  ├─ trip/            # Trip Photos: reading worker, grouping, grid index, import lookups, the review's logic, review thumbnails (their worker), its config (unit tested)
 │  │  └─ stats/           # profile stats, country + continent tables (unit tested)
 │  └─ styles/globals.css  # tokens
@@ -340,7 +344,7 @@ create table import_log (
 - Rows are tiny (~1 KB per visit), so the free 500 MB database holds hundreds of thousands of visits.
 - `updated_at` is maintained by a trigger.
 - Deleting a visit never deletes its place row, a manual place (§11.4) included.
-- **Account deletion (§14.6):** nothing may block deleting a user from `auth.users`. `profiles`, `visits`, and `resolve_log` cascade. `places.created_by`, `google_call_log.user_id`, and `import_log.user_id` become null (`on delete set null`): a deleted user's Google calls stay counted toward the monthly cap (§17), and their import counts stay for analysis. The server deletes the user's private manual places itself (§14.6), since `set null` would leave them orphaned.
+- **Account deletion (§14.6):** nothing may block deleting a user from `auth.users`. `profiles`, `visits`, and `resolve_log` cascade. `places.created_by`, `google_call_log.user_id`, and `import_log.user_id` become null (`on delete set null`): a deleted user's Google calls stay counted toward the monthly cap (§17), and their import counts stay for analysis. The server deletes the user's private manual places itself (§14.6), since `set null` would leave them orphaned. (Checked on the live database 2026-10-10: deleting a user nulls both log columns.)
 
 ---
 
@@ -469,6 +473,7 @@ Shown after any successful lookup:
 | Trip Photos: a stop failed to save | "Couldn't save this stop. Try again." (on the stop) |
 | Leaving the review with unsaved stops | RPG dialog "Leave without saving?" + "Unsaved stops will be lost." Leave / Stay |
 | Wrong current password (§14.6) | "That's not your current password." |
+| After deleting the account (§14.6) | "Account deleted." on `/login` |
 
 Messages that need acknowledgment use the RPG dialog. Non-blocking messages use toasts or alerts.
 
@@ -700,9 +705,9 @@ As in the sheet (logo, "WANDERDEX", tagline "Collect places. Build your world.")
   - No recents section (My Visits covers it).
   - No visits at all: the travel stats are one panel, "No pins yet, traveler. Your adventure starts on the Overworld!".
 - **Account:**
-  - **Change password:** Current password, New password, Confirm new password (min 6, max 72 characters, no other rules, §10), with the warning "Passwords can't be recovered. Pick one you'll remember." The server verifies the current password first (a sign-in with it); a wrong one shows "That's not your current password." and nothing changes. Success: toast "Password changed!"; the user stays logged in.
-  - **Export data:** "Download CSV" and "Download JSON": the user's visits with place details, one row per visit, newest first: date (local, at its precision), precision, time zone, rating, note, category, source, source input, place name, address, city, country, country code, latitude, longitude, Google place id. The files are built in the browser from the user's own data, read on the server under their session (RLS, paging helper); nothing goes to any other service. Names: `wanderdex-visits-YYYY-MM-DD.csv` / `.json`.
-  - **Delete account:** an RPG dialog, "Delete your account?" / "Your visits and private places will be deleted. This can't be undone.", with a field "Type <username> to confirm". "Delete account" stays disabled until the field matches the username. The server checks the session and the typed username, then, with the admin API (secret key): notes the user's private manual places (`created_by` = user, `google_place_id` null), deletes the auth user (which cascades, §8), then deletes those places. The user is signed out and sent to `/login`. Shared Google places stay.
+  - **Change password:** Current password, New password, Confirm new password (min 6, max 72 characters, no other rules, §10; the new one must differ from the current one), with the warning "Passwords can't be recovered. Pick one you'll remember." A Server Function verifies the current password first (a sign-in with it, on the user's placeholder email, §10); a wrong one shows "That's not your current password." and nothing changes. Then it updates the password and signs out the user's other sessions (other devices), keeping this one. Success: toast "Password changed!"; the user stays logged in. Supabase's auth rate limits apply ("Slow down, traveler!", §11.7).
+  - **Export data:** "Download CSV" and "Download JSON": the user's visits with place details, one row per visit, newest first, with these columns: name, category (the user's), address, city, country, country code, latitude, longitude, the visit date in UTC (ISO) and local (at its precision: `YYYY-MM-DDTHH:mm`, `YYYY-MM-DD`, or `YYYY-MM`, in its zone), precision, time zone, rating, note, source, source input, Google place id, and created at (ISO). `GET /api/export` reads them on the server under the user's session (RLS, paging helper); the files are built in the browser and saved with a download link (works on iPhone Safari); nothing goes to any other service. CSV: RFC 4180 quoting (a cell with a comma, quote, or line break is quoted, quotes doubled), CRLF line ends, UTF-8 with a byte order mark (so Excel shows accents), and a guard against formula injection: a text cell starting with `=`, `+`, `-`, `@`, a tab, or a carriage return gets a leading `'` (numbers, such as a negative latitude, are written as they are). Names: `wanderdex-export-YYYY-MM-DD.csv` / `.json`, by the browser's date.
+  - **Delete account:** an RPG dialog, "Delete your account?" / "Your visits and private places will be deleted. This can't be undone.", the hint "Want a copy? Export your data first.", and a field "Type <username> to confirm" (not case-sensitive, surrounding spaces ignored, as at login). "Delete account" stays disabled until the field matches the username. `DELETE /api/account` checks the session, validates with zod (the typed username, nothing else), checks it against the user's profile, then, with the admin API (secret key), deletes in this order, so nothing is orphaned and a failed attempt can be retried: the user's visits, then their private manual places (`created_by` = user, `google_place_id` null), then the auth user (which cascades to the profile and `resolve_log`, §8). Shared Google places stay. It then clears the session cookies; the browser lands on `/login` with "Account deleted."
   - **Log out:** the RPG confirm (§10). On phones this is the only Log out.
 - **Data:** computed on the server under the user's session (RLS), with the existing paging helper (`readAllPages`). The stats are pure functions over the rows, unit tested.
 
@@ -901,6 +906,7 @@ Toasts auto-dismiss after ~4 s and have a close (×) button. Copy is in §11.6 a
   - Photo reading (§11.2): RAW files (DNG and the camera formats, by type and extension), partial reads (only the metadata part of a large JPEG, DNG, PNG, or WebP is read, and a GPS block past the first chunk is still found), and EXIF thumbnails with the photo's orientation.
   - Trip Photos (§11.8): skipping (no GPS, no date, unreadable), grouping into stops (distance, time gap, same-day merge, time order, centroid, first photo's time, time zone day boundaries, the 500-photo and 150-stop limits), the worker's protocol (batches, progress, results, failures, cancelling), the review's made-thumbnail queue (the worker starts only when needed, at most a few at a time, a waiting request can be dropped, a failed worker gives the sprite), the grid index (same answers as comparing every pair, including across cell edges and at high latitudes), sharing lookups within 50 m, the local-first match, the lookup cache (cell rounding, hit, miss, 30-day expiry, re-sorting, empty results and their 7-day expiry), the per-layer counts, "Already logged" by precision, and an idempotent save (a repeated save of one stop leaves one visit and one manual place).
   - Country and continent tables (§14.6): exactly 195 states, every ISO 3166-1 code classified, the listed examples; the profile stats.
+  - Account actions (§14.6): CSV escaping and the formula-injection guard, the export's shape, the username match, and the delete order.
 - **Manual device checklist (every phase):**
   - Phone at 375px (Chrome and Safari) and desktop (Chrome).
   - Add via each mode, including a photo with GPS and one without.
@@ -948,7 +954,7 @@ The owner is in a rush. Target roughly **two weeks** for the core build; these a
 - README with setup steps (PowerShell commands).
 - **Done when:** the app matches the design sheet (with §16.9 overrides) and passes the QA checklist.
 
-### Phase 4: Trip Photos, Profile, passport secret: in progress (4.1–4.3 done)
+### Phase 4: Trip Photos, Profile, passport secret: in progress (4.1–4.4 done)
 - **4.1 Trip Photos: reading, grouping, and the review screen** (§11.8 steps 1–4 and 7): done (2026-10-10). Local only, no lookups yet. Every push deploys to production, so the mode showed only in development builds behind one flag, `TRIP_PHOTOS_ENABLED` (`NODE_ENV === "development"`), until the owner had tested 4.2; removed 2026-10-10, so every build shows four modes. **First:** a quick check on the owner's iPhone that a multi-select from Safari's picker keeps GPS (single photos already do, §22). Done 2026-10-06: 38 picked, all 36 regular photos read with location and date; the 2 ProRAW DNGs were refused by the file-type check, now supported (§11.2). Then the fourth mode, multi-select and drop, the reading Web Worker with bounded concurrency and progress, skipping and its summary, grouping, the review with stops, thumbnails, and the leave warning; and the benchmark's synthetic trip generator with its grouping report.
 - **4.2 Trip Photos: lookups and saving** (§11.8 steps 5–6 and 8–11, §17): done (2026-10-10), in this order:
   1. The migration: `nearby_cache`, `import_log`, and `visits.import_id` / `import_stop` with their unique index (§8, §9). Stop until the owner confirms it's applied.
@@ -957,7 +963,7 @@ The owner is in a rush. Target roughly **two weeks** for the core build; these a
   4. Idempotent batch save, the lookup counts in the review, the summary toast, and fitting the map to the new pins.
   5. The benchmark's lookup report (cold and warm cache) and `docs/ARCHITECTURE.md`.
 - **4.3 Profile: stats and navigation** (§14.6, §14.1): done (2026-10-10). The page, its stats and travel stats, the country and continent tables, the sidebar's profile item, the phone avatar button on the Overworld and My Visits (the avatar menu is gone), and the Account section's Log out.
-- **4.4 Profile: account actions** (§14.6): change password, export data, delete account (Log out came with 4.3). Confirm that `google_call_log.user_id` is `on delete set null` in the live database (it is in `20261004000000_google_call_log.sql`); a migration is needed only if it isn't.
+- **4.4 Profile: account actions** (§14.6): done (2026-10-10). Change password, export data, delete account (Log out came with 4.3). Confirmed on the live database that `google_call_log.user_id` and `import_log.user_id` become null when a user is deleted, so no migration was needed.
 - **4.5 Passport secret** (§15.1).
 - **Done when:**
   - A trip's photos import as visits on phone and desktop, with no photo data leaving the device (checked in the network log, as in Phase 2) and no duplicates on re-import ("Already logged") or on a retried save (idempotency).

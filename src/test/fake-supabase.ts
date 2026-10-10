@@ -5,7 +5,8 @@ type Row = Record<string, unknown>;
 // An in-memory stand-in for the Supabase client, for tests: tables are arrays of rows. Supports
 // the query shapes the server uses: select (with { count, head }, and embedded rows written
 // `alias:table(...)`, found by the row's `<alias>_id`), insert, upsert (onConflict,
-// ignoreDuplicates), update, delete, eq, neq, gte, lt, in, order, range, single, and maybeSingle.
+// ignoreDuplicates), update, delete, eq, neq, is (null), gte, lt, in, order, range, single, and
+// maybeSingle.
 // Inserted rows get an id and created_at, as the database would. `unique` lists each table's
 // unique column sets (a row with a null in the set never conflicts, like a partial index on not
 // null): an insert that would repeat one fails with Postgres' 23505.
@@ -87,6 +88,7 @@ export function fakeSupabase(tables: Record<string, Row[]> = {}, { unique = {} }
       delete: () => ((op = "delete"), query),
       eq: (column: string, value: unknown) => (filters.push((row) => row[column] === value), query),
       neq: (column: string, value: unknown) => (filters.push((row) => row[column] !== value), query),
+      is: (column: string, value: null) => (filters.push((row) => (row[column] ?? null) === value), query),
       // Timestamps are ISO strings, which sort as text.
       gte: (column: string, value: string) => (filters.push((row) => String(row[column]) >= value), query),
       lt: (column: string, value: string) => (filters.push((row) => String(row[column]) < value), query),

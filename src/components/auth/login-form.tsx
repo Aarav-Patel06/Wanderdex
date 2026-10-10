@@ -9,11 +9,17 @@ import { FormField, usernameInputProps } from "@/components/auth/form-field";
 import { Alert, AlertTitle } from "@/components/ui/8bit/alert";
 import { Button } from "@/components/ui/8bit/button";
 
-export function LoginForm() {
+// notice: a one-line message above the fields, e.g. after deleting an account.
+export function LoginForm({ notice }: { notice?: string }) {
   const [state, action, pending] = useActionState<AuthFormState, FormData>(login, {});
 
   return (
     <form action={action} noValidate className="flex flex-col gap-6 px-1.5">
+      {notice && (
+        <Alert role="status">
+          <AlertTitle>{notice}</AlertTitle>
+        </Alert>
+      )}
       <FormField
         name="username"
         label="Username"
