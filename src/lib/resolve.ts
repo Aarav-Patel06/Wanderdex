@@ -2,16 +2,18 @@ import { z } from "zod";
 
 import { type ParsedText, parseText } from "@/lib/ai/parse";
 import { timezoneAt, todayIn } from "@/lib/dates";
-import { type CallGate, type Candidate, nearbySearchWithRetry, PlacesError, textSearch } from "@/lib/google/places";
+import { type CallGate, type Candidate, PlacesError, textSearch } from "@/lib/google/places";
 import { isApplePlacePage, readApplePlace } from "@/lib/links/apple";
 import { ExpandError, expandLink } from "@/lib/links/expand";
 import { type LatLng, parseMapsLink } from "@/lib/links/parse";
 import { readMapsLink } from "@/lib/links/validate";
+import type { NearbyLookup } from "@/lib/nearby-cache";
 import { type SignedPlace, signingSecret, signPlace } from "@/lib/place-signature";
 import { RateLimitError } from "@/lib/rate-limit";
 
 // The lookup pipeline behind /api/resolve/link, /api/resolve/text, and /api/resolve/nearby
 // (SPEC §11.1, §11.3, §11.2). Every Google call goes through `gate`, the monthly cap (SPEC §17).
+// Nearby Searches take a NearbyLookup: the routes pass the shared cache's (lib/nearby-cache).
 
 // Stable error codes; the UI maps each one to its §11.7 copy.
 export const ERROR_STATUS = {
@@ -66,7 +68,11 @@ export const nearbyBodySchema = z.strictObject({
 // saved visit, and a photo visit has no source input (SPEC §8).
 export type NearbyResult = { candidates: ResolvedCandidate[] };
 
-export async function resolveLink(input: string, gate: CallGate): Promise<LinkResult> {
+export async function resolveLink(
+  input: string,
+  gate: CallGate,
+  nearby: NearbyLookup,
+): Promise<LinkResult> {
   // Before any upstream call: without the secret there are no signed results to return.
   const secret = signingSecret();
   const url = readMapsLink(input);
@@ -93,7 +99,7 @@ export async function resolveLink(input: string, gate: CallGate): Promise<LinkRe
 
   // A name searches by text (biased toward the coordinates); coordinates alone search nearby.
   const candidates = await findPlaces(
-    () => (name ? textSearch(gate, name, location) : nearbySearchWithRetry(gate, location!)),
+    () => (name ? textSearch(gate, name, location) : nearby(location!)),
     name,
     secret,
   );
@@ -115,10 +121,11 @@ export async function resolveText(
   return { candidates, visited: parsed?.visited ?? null, source_input: text };
 }
 
-// Nearby Search at 50 m, then once more at 150 m, nearest first, up to 3 (SPEC §11.2 step 4).
-export async function resolveNearby(point: LatLng, gate: CallGate): Promise<NearbyResult> {
+// Nearby Search at 50 m, then once more at 150 m, nearest first, up to 3 (SPEC §11.2 step 4),
+// through the shared cache.
+export async function resolveNearby(point: LatLng, nearby: NearbyLookup): Promise<NearbyResult> {
   const secret = signingSecret();
-  return { candidates: await findPlaces(() => nearbySearchWithRetry(gate, point), null, secret) };
+  return { candidates: await findPlaces(() => nearby(point), null, secret) };
 }
 
 async function findPlaces(search: () => Promise<Candidate[]>, name: string | null, secret: string) {

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { CallGate } from "@/lib/google/places";
+import { type CallGate, nearbySearchWithRetry } from "@/lib/google/places";
 import { APPLE_PLACE_PAGES, APPLE_SHORT_LINKS, CREPE_STATION, GOOGLE_SHORT_LINKS } from "@/lib/links/fixtures";
 import { verifyPlace } from "@/lib/place-signature";
 import { RateLimitError } from "@/lib/rate-limit";
@@ -8,6 +8,8 @@ import { ResolveError, resolveLink, resolveText } from "@/lib/resolve";
 
 // No monthly cap here (lib/rate-limit has its own tests).
 const noCap: CallGate = async () => {};
+// Nearby Search without the shared cache (lib/nearby-cache has its own tests).
+const uncached = (gate: CallGate) => (point: { lat: number; lng: number }) => nearbySearchWithRetry(gate, point);
 
 const PLACE = {
   id: "ChIJ-joes",
@@ -84,7 +86,7 @@ describe("resolveLink", () => {
       [TEXT_SEARCH]: places(PLACE),
     });
 
-    const result = await resolveLink(`Joe’s on Newbury\n${SHORT}`, noCap);
+    const result = await resolveLink(`Joe’s on Newbury\n${SHORT}`, noCap, uncached(noCap));
     expect(result).toMatchObject({
       name: "Joe’s on Newbury",
       visited: null,
@@ -103,13 +105,13 @@ describe("resolveLink", () => {
   it("fails closed without the signing secret, before any fetch", async () => {
     vi.stubEnv("RESOLVE_SIGNING_SECRET", "");
     const fetchMock = mockFetch({});
-    await expect(resolveLink(CREPE_STATION, noCap)).rejects.toThrow("RESOLVE_SIGNING_SECRET is not set");
+    await expect(resolveLink(CREPE_STATION, noCap, uncached(noCap))).rejects.toThrow("RESOLVE_SIGNING_SECRET is not set");
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("parses a long link without fetching it", async () => {
     const fetchMock = mockFetch({ [TEXT_SEARCH]: places(PLACE) });
-    const result = await resolveLink(CREPE_STATION, noCap);
+    const result = await resolveLink(CREPE_STATION, noCap, uncached(noCap));
     expect(result.name).toBe("Crêpe Station");
     expect(result.source_input).toBe(new URL(CREPE_STATION).href);
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -121,7 +123,7 @@ describe("resolveLink", () => {
 
   it("uses Nearby Search at 50 m, then 150 m, for coordinates only", async () => {
     const fetchMock = mockFetch({ [NEARBY]: [places(), places(PLACE)] });
-    const result = await resolveLink("https://maps.google.com/?q=42.350511,-71.07966", noCap);
+    const result = await resolveLink("https://maps.google.com/?q=42.350511,-71.07966", noCap, uncached(noCap));
     expect(result.name).toBeNull();
     expect(result.candidates).toHaveLength(1);
     expect(bodiesFor(fetchMock, NEARBY).map((b) => b.locationRestriction.circle.radius)).toEqual([50, 150]);
@@ -129,7 +131,7 @@ describe("resolveLink", () => {
 
   it("rejects a non-Maps link without fetching", async () => {
     const fetchMock = mockFetch({});
-    expect(await resolveError(resolveLink("https://example.com/place", noCap))).toEqual({
+    expect(await resolveError(resolveLink("https://example.com/place", noCap, uncached(noCap)))).toEqual({
       code: "not_maps_link",
       parsedName: null,
     });
@@ -146,7 +148,7 @@ describe("resolveLink", () => {
         [final]: () => new Response(APPLE_PLACE_PAGES[final]),
         [TEXT_SEARCH]: places(PLACE),
       });
-      const result = await resolveLink(short, noCap);
+      const result = await resolveLink(short, noCap, uncached(noCap));
       expect(result).toMatchObject({ name: "Sushi By M", source_input: short, visited: null });
       expect(bodiesFor(fetchMock, TEXT_SEARCH)[0]).toEqual({
         textQuery: "Sushi By M",
@@ -159,18 +161,18 @@ describe("resolveLink", () => {
 
     it("can't read a page without the tags", async () => {
       mockFetch({ [short]: expand, [final]: () => new Response("<html><title>Apple Maps</title></html>") });
-      expect(await resolveError(resolveLink(short, noCap))).toEqual({ code: "link_unparseable", parsedName: null });
+      expect(await resolveError(resolveLink(short, noCap, uncached(noCap)))).toEqual({ code: "link_unparseable", parsedName: null });
     });
 
     it("reports a page fetch failure as upstream_error", async () => {
       mockFetch({ [short]: expand, [final]: () => Promise.reject(new DOMException("t", "TimeoutError")) });
-      expect((await resolveError(resolveLink(short, noCap))).code).toBe("upstream_error");
+      expect((await resolveError(resolveLink(short, noCap, uncached(noCap)))).code).toBe("upstream_error");
     });
   });
 
   it("can't read a link that redirects off the allowlist", async () => {
     mockFetch({ [SHORT]: () => new Response(null, { status: 302, headers: { location: "https://example.com/" } }) });
-    expect((await resolveError(resolveLink(SHORT, noCap))).code).toBe("link_unparseable");
+    expect((await resolveError(resolveLink(SHORT, noCap, uncached(noCap)))).code).toBe("link_unparseable");
   });
 
   it("reports a network failure while expanding as upstream_error", async () => {
@@ -179,12 +181,12 @@ describe("resolveLink", () => {
         throw new TypeError("fetch failed");
       },
     });
-    expect((await resolveError(resolveLink(SHORT, noCap))).code).toBe("upstream_error");
+    expect((await resolveError(resolveLink(SHORT, noCap, uncached(noCap)))).code).toBe("upstream_error");
   });
 
   it("returns no_results with the parsed name", async () => {
     mockFetch({ [TEXT_SEARCH]: places() });
-    expect(await resolveError(resolveLink(CREPE_STATION, noCap))).toEqual({
+    expect(await resolveError(resolveLink(CREPE_STATION, noCap, uncached(noCap)))).toEqual({
       code: "no_results",
       parsedName: "Crêpe Station",
     });
@@ -196,7 +198,7 @@ describe("resolveLink", () => {
     [403, "upstream_error"],
   ])("maps a Places %i to %s, keeping the name", async (status, code) => {
     mockFetch({ [TEXT_SEARCH]: () => new Response("{}", { status }) });
-    expect(await resolveError(resolveLink(CREPE_STATION, noCap))).toEqual({ code, parsedName: "Crêpe Station" });
+    expect(await resolveError(resolveLink(CREPE_STATION, noCap, uncached(noCap)))).toEqual({ code, parsedName: "Crêpe Station" });
   });
 
   it("answers rate_limited at the monthly cap, keeping the name, without calling Google", async () => {
@@ -204,7 +206,7 @@ describe("resolveLink", () => {
     const capped: CallGate = async () => {
       throw new RateLimitError();
     };
-    expect(await resolveError(resolveLink(CREPE_STATION, capped))).toEqual({
+    expect(await resolveError(resolveLink(CREPE_STATION, capped, uncached(capped)))).toEqual({
       code: "rate_limited",
       parsedName: "Crêpe Station",
     });

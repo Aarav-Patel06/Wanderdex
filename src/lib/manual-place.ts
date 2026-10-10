@@ -1,25 +1,27 @@
 import { type CountryShape, countryAt, loadCountryShapes } from "@/lib/countries";
-import { type CallGate, type Candidate, nearbySearchWithRetry, PlacesError } from "@/lib/google/places";
+import { type Candidate, PlacesError } from "@/lib/google/places";
 import type { LatLng } from "@/lib/links/parse";
+import type { NearbyLookup } from "@/lib/nearby-cache";
 import { RateLimitError } from "@/lib/rate-limit";
 
 // City and country for a dropped pin (SPEC §11.4), worked out on the server from its coordinates.
 
 export type PlaceArea = Pick<Candidate, "city" | "country" | "country_code">;
 
-// Nearby Search at the pin (50 m, then 150 m, nearest first), using the first result's address:
-// the same city and country rules as any lookup (SPEC §12.1, Tokyo included). With no result,
-// the country comes from the Natural Earth shapes and the city stays empty. A Google error
-// (quota, outage) also falls back to the shapes, and so does reaching our own Nearby Search
-// monthly cap (`gate`, SPEC §17), which skips the call: saving a pin never depends on Google.
+// Nearby Search at the pin (50 m, then 150 m, nearest first; `nearby`, through the shared cache),
+// using the first result's address: the same city and country rules as any lookup (SPEC §12.1,
+// Tokyo included). With no result, the country comes from the Natural Earth shapes and the city
+// stays empty. A Google error (quota, outage) also falls back to the shapes, and so does reaching
+// our own Nearby Search monthly cap (SPEC §17), which skips the call: saving a pin never depends
+// on Google.
 export async function placeArea(
   point: LatLng,
-  gate: CallGate,
+  nearby: NearbyLookup,
   shapes: () => Promise<CountryShape[]> = loadCountryShapes,
 ): Promise<PlaceArea> {
   let nearest: Candidate | undefined;
   try {
-    [nearest] = await nearbySearchWithRetry(gate, point);
+    [nearest] = await nearby(point);
   } catch (error) {
     if (!(error instanceof PlacesError || error instanceof RateLimitError)) throw error;
     console.error("manual place: no Nearby Search, using the country shapes:", error.message);

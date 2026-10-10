@@ -53,6 +53,8 @@ Migrations are applied **by hand** in the Supabase SQL Editor (the Supabase CLI 
 | 1 | [`20260928000000_init.sql`](supabase/migrations/20260928000000_init.sql) | Types, the `profiles` / `places` / `visits` / `resolve_log` tables, indexes, the `updated_at` trigger, and Row Level Security |
 | 2 | [`20260929000000_tighten_grants.sql`](supabase/migrations/20260929000000_tighten_grants.sql) | Revokes Supabase's default table privileges and grants back only what signed-in users need |
 | 3 | [`20261004000000_google_call_log.sql`](supabase/migrations/20261004000000_google_call_log.sql) | The `google_call_log` table for the monthly Google cap (server only) |
+| 4 | [`20261006000000_more_categories.sql`](supabase/migrations/20261006000000_more_categories.sql) | The Sports, Campus, Airport, and City categories |
+| 5 | [`20261006010000_trip_import.sql`](supabase/migrations/20261006010000_trip_import.sql) | Trip Photos: the shared `nearby_cache` and `import_log` tables (server only), and `visits.import_id` / `import_stop` with their unique index |
 
 For each file: copy it to the clipboard, then in Supabase open **SQL Editor** â†’ **New query**, paste, and click **Run**.
 
@@ -60,6 +62,8 @@ For each file: copy it to the clipboard, then in Supabase open **SQL Editor** â†
 Get-Content supabase\migrations\20260928000000_init.sql -Raw | Set-Clipboard
 Get-Content supabase\migrations\20260929000000_tighten_grants.sql -Raw | Set-Clipboard
 Get-Content supabase\migrations\20261004000000_google_call_log.sql -Raw | Set-Clipboard
+Get-Content supabase\migrations\20261006000000_more_categories.sql -Raw | Set-Clipboard
+Get-Content supabase\migrations\20261006010000_trip_import.sql -Raw | Set-Clipboard
 ```
 
 (Run one line, paste and run it in Supabase, then the next line.)
@@ -88,7 +92,7 @@ Create a key in Google AI Studio (free tier). If Gemini fails or hits its limit,
 pnpm dev     # dev server at http://localhost:3000
 pnpm test    # unit tests (Vitest)
 pnpm lint    # ESLint
-pnpm bench:import   # Trip Photos benchmark: a synthetic trip through the grouping (not part of pnpm test)
+pnpm bench:import   # Trip Photos benchmark: a synthetic trip through the grouping and the lookups (not part of pnpm test)
 pnpm build   # production build
 pnpm start   # serve the production build locally (after pnpm build)
 ```

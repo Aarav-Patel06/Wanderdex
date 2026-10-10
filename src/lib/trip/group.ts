@@ -126,13 +126,16 @@ export function centroidOf(points: { lat: number; lng: number }[]) {
   return { lat: lat / points.length, lng };
 }
 
+// The mean Earth radius, in metres.
+export const EARTH_RADIUS_M = 6_371_008.8;
+
 // Great-circle distance in metres (haversine).
 export function metres(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
   const rad = Math.PI / 180;
   const dLat = (b.lat - a.lat) * rad;
   const dLng = (b.lng - a.lng) * rad;
   const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLng / 2) ** 2;
-  return 2 * 6_371_008.8 * Math.asin(Math.min(1, Math.sqrt(h)));
+  return 2 * EARTH_RADIUS_M * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
 // "Skipped 15 photos: 12 without a location or date, 3 unreadable." (SPEC §11.7), only the parts

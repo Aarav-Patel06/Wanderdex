@@ -164,6 +164,20 @@ describe("POST /api/resolve/nearby", () => {
     ]);
   });
 
+  it("answers a repeat lookup at the same spot from the shared cache, with no Google call", async () => {
+    const fetchMock = mockPlaces(places(PLACE));
+    expect((await post({ lat: 35.6595, lng: 139.7005 })).status).toBe(200);
+    const res = await post({ lat: 35.65951, lng: 139.70051 });
+    expect(res.status).toBe(200);
+    const { candidates } = await res.json();
+    expect(candidates[0]).toMatchObject({ google_place_id: "ChIJ-shibuya", timezone: "Asia/Tokyo" });
+    expect(verifyPlace(candidates[0], SECRET)).not.toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(state.db.tables.google_call_log).toHaveLength(1);
+    // The per-user limit counts both requests, hit or miss.
+    expect(state.db.tables.resolve_log).toHaveLength(2);
+  });
+
   it("answers 429 rate_limited over the per-user limit, without calling Google", async () => {
     state.db.tables.resolve_log = rowsAt(LOOKUPS_PER_HOUR, new Date(), 5, { user_id: "user-1", kind: "link" });
     const fetchMock = mockPlaces();

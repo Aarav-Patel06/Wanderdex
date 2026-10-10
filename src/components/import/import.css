@@ -7,7 +7,14 @@
   background: var(--surface);
   box-shadow: 4px 4px 0 var(--text);
   content-visibility: auto;
-  contain-intrinsic-size: auto 280px;
+  contain-intrinsic-size: auto 480px;
+}
+
+/* "Already logged" (SPEC §11.8 step 6), beside the stop's Match label: dark text on warning
+   (10.4:1, SPEC §16.3), in a thin pixel border. */
+.trip-logged {
+  border: 2px solid var(--text);
+  background: var(--warning);
 }
 
 /* An EXIF thumbnail is turned upright by the photo's orientation (trip-review.tsx), so the browser

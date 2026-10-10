@@ -34,6 +34,8 @@ export type Drop = {
 type OverworldApi = {
   // Puts a just-saved visit's pin on the map and pans to it (SPEC §11.6 step 7).
   addPin: (pin: NewPin) => void;
+  // Puts a Trip Photos import's pins on the map and fits the map to them (SPEC §11.8 step 9).
+  addPins: (pins: NewPin[]) => void;
   // A floating panel over the map (data-map-cover) appeared (opened), resized, or went away.
   coversChanged: (opened?: boolean) => void;
   // The dropped pin, or null for none.
@@ -84,6 +86,7 @@ export function Overworld({
 }) {
   const [places, setPlaces] = useState(initialPlaces);
   const [focus, setFocus] = useState<NewPin | null>(null);
+  const [fit, setFit] = useState<NewPin[] | null>(null);
   const [coverTick, setCoverTick] = useState(0);
   // How many times a panel has opened over the map; the pin popup closes each time.
   const [coverOpens, setCoverOpens] = useState(0);
@@ -94,6 +97,10 @@ export function Overworld({
       addPin(pin) {
         setPlaces((current) => addVisit(current, pin));
         setFocus({ ...pin });
+      },
+      addPins(pins) {
+        setPlaces((current) => pins.reduce(addVisit, current));
+        setFit([...pins]);
       },
       coversChanged(opened) {
         setCoverTick((tick) => tick + 1);
@@ -113,6 +120,7 @@ export function Overworld({
         <MapView
           places={places}
           focus={focus}
+          fit={fit}
           coverTick={coverTick}
           coverOpens={coverOpens}
           drop={drop}

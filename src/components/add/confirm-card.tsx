@@ -141,32 +141,16 @@ export function ConfirmCard({
             {onDropPin && <DropPinLink onClick={onDropPin} disabled={saving} className="-my-1" />}
           </legend>
           {candidates.map((option, index) => (
-            // Native radios: arrow keys move between them. The row is the tap target; the chosen
-            // one is accent with dark text. The list never changes while the card is open.
-            <label
+            // The list never changes while the card is open.
+            <PlaceOption
               key={index}
-              className="flex min-h-11 cursor-pointer items-center gap-3 border-4 border-text bg-background px-2 py-0.5 has-checked:bg-accent has-focus-visible:outline-4 has-focus-visible:outline-accent has-focus-visible:[box-shadow:var(--focus-ring)]"
-            >
-              <input
-                type="radio"
-                name={`${ids}-place`}
-                checked={selected === index}
-                onChange={() => pick(index)}
-                className="sr-only"
-              />
-              <Image
-                src={categorySprite(option.category)}
-                alt=""
-                width={32}
-                height={32}
-                unoptimized
-                className="pixelated shrink-0"
-              />
-              <span className="flex min-w-0 flex-col">
-                <span className="text-small break-words">{option.name}</span>
-                <span className="text-tiny">{[option.city, option.country].filter(Boolean).join(", ")}</span>
-              </span>
-            </label>
+              group={`${ids}-place`}
+              checked={selected === index}
+              onChange={() => pick(index)}
+              icon={<Image src={categorySprite(option.category)} alt="" width={32} height={32} unoptimized className="pixelated shrink-0" />}
+              name={option.name}
+              detail={[option.city, option.country].filter(Boolean).join(", ")}
+            />
           ))}
         </fieldset>
       ) : (
@@ -251,5 +235,38 @@ export function ConfirmCard({
         </div>
       )}
     </form>
+  );
+}
+
+// One place to choose, as a radio row (the confirmation card's candidates, the Trip Photos review's
+// matches): its icon (the category sprite), name, and city/country. Native radios, so the arrow
+// keys move between a group's rows. The row is the tap target; the chosen one is accent with dark
+// text.
+export function PlaceOption({
+  group,
+  checked,
+  onChange,
+  icon,
+  name,
+  detail,
+  disabled,
+}: {
+  group: string;
+  checked: boolean;
+  onChange: () => void;
+  icon: React.ReactNode;
+  name: string;
+  detail: string;
+  disabled?: boolean;
+}) {
+  return (
+    <label className="flex min-h-11 cursor-pointer items-center gap-3 border-4 border-text bg-background px-2 py-0.5 has-checked:bg-accent has-focus-visible:outline-4 has-focus-visible:outline-accent has-focus-visible:[box-shadow:var(--focus-ring)]">
+      <input type="radio" name={group} checked={checked} onChange={onChange} disabled={disabled} className="sr-only" />
+      {icon}
+      <span className="flex min-w-0 flex-col">
+        <span className="text-small break-words">{name}</span>
+        <span className="text-tiny">{detail}</span>
+      </span>
+    </label>
   );
 }

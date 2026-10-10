@@ -57,7 +57,7 @@ const MODES = [
 //   the hovered or focused one; choosing one swaps the menu for its input, with a way back.
 //   Upload Photo and Trip Photos also take dropped files there.
 // photoDate: the date of a photo without GPS, carried into Type Location.
-// tripProgress: photos read so far while Trip Photos reads them.
+// tripStatus: what Trip Photos is doing ("Reading photos 42/300", then "Finding places...").
 export function AddPanel({
   layout,
   mode,
@@ -71,7 +71,7 @@ export function AddPanel({
   loading,
   message,
   photoDate,
-  tripProgress,
+  tripStatus,
   inputRef,
 }: {
   layout: "grid" | "list";
@@ -86,7 +86,7 @@ export function AddPanel({
   loading: boolean;
   message: PanelMessage | null;
   photoDate: string | null;
-  tripProgress: { done: number; total: number } | null;
+  tripStatus: string | null;
   inputRef?: React.Ref<HTMLInputElement>;
 }) {
   const inputId = useId();
@@ -183,9 +183,9 @@ export function AddPanel({
             />
           )}
           {loading &&
-            (tripProgress ? (
+            (tripStatus ? (
               <p role="status" className="mt-2">
-                Reading photos {tripProgress.done}/{tripProgress.total}
+                {tripStatus}
               </p>
             ) : (
               <Loading className="mt-2" />

@@ -2,8 +2,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { nearbySearchWithRetry, textSearch } from "@/lib/google/places";
 import { placeArea } from "@/lib/manual-place";
-import { googleCallGate, limitLookup, monthStartUtc, RateLimitError } from "@/lib/rate-limit";
-import { GOOGLE_CALLS_PER_MONTH, LOOKUPS_PER_DAY, LOOKUPS_PER_HOUR } from "@/lib/rate-limits";
+import {
+  googleCallGate,
+  importLookupsLeft,
+  limitLookup,
+  monthStartUtc,
+  RateLimitError,
+  takeImportLookup,
+} from "@/lib/rate-limit";
+import { GOOGLE_CALLS_PER_MONTH, IMPORT_LOOKUPS_PER_DAY, IMPORT_MAX_STOPS, LOOKUPS_PER_DAY, LOOKUPS_PER_HOUR } from "@/lib/rate-limits";
 import { fakeSupabase, rowsAt } from "@/test/fake-supabase";
 
 const NOW = new Date("2026-10-15T12:00:00Z");
@@ -49,7 +56,33 @@ afterEach(() => {
 describe("the limits", () => {
   it("are SPEC §17's", () => {
     expect([LOOKUPS_PER_HOUR, LOOKUPS_PER_DAY]).toEqual([60, 300]);
+    expect([IMPORT_MAX_STOPS, IMPORT_LOOKUPS_PER_DAY]).toEqual([150, 300]);
     expect(GOOGLE_CALLS_PER_MONTH).toEqual({ text_search: 4500, nearby_search: 4500 });
+  });
+});
+
+describe("the trip import allowance (per user)", () => {
+  const imports = (count: number, minutesAgo: number, userId = USER) =>
+    rowsAt(count, NOW, minutesAgo, { user_id: userId, kind: "import" });
+
+  it("counts only the user's import rows in the last 24 hours", async () => {
+    const { client } = fakeSupabase({
+      resolve_log: [
+        ...imports(100, 60),
+        ...imports(100, 24 * 60 + 1),
+        ...imports(100, 60, "someone-else"),
+        ...rowsAt(300, NOW, 5, { user_id: USER, kind: "nearby" }),
+      ],
+    });
+    expect(await importLookupsLeft(client, USER, NOW)).toBe(IMPORT_LOOKUPS_PER_DAY - 100);
+  });
+
+  it("takes the 300th import lookup in 24 hours and refuses the 301st, logging only what it takes", async () => {
+    const { client, tables } = fakeSupabase({ resolve_log: imports(IMPORT_LOOKUPS_PER_DAY - 1, 30) });
+    expect(await takeImportLookup(client, USER)).toBe(true);
+    expect(await takeImportLookup(client, USER)).toBe(false);
+    expect(tables.resolve_log).toHaveLength(IMPORT_LOOKUPS_PER_DAY);
+    expect(tables.resolve_log.at(-1)).toMatchObject({ user_id: USER, kind: "import" });
   });
 });
 
@@ -94,8 +127,15 @@ describe("limitLookup (per user)", () => {
     await expect(limitLookup(client, USER, "link")).resolves.toBeUndefined();
   });
 
+  it("ignores Trip Photos' import rows, which have their own allowance", async () => {
+    const { client } = fakeSupabase({ resolve_log: rowsAt(IMPORT_LOOKUPS_PER_DAY, NOW, 5, { user_id: USER, kind: "import" }) });
+    await expect(limitLookup(client, USER, "link")).resolves.toBeUndefined();
+  });
+
   it("throws a database error", async () => {
-    const failing = { from: () => ({ select: () => ({ eq: () => ({ gte: async () => ({ error: new Error("down") }) }) }) }) };
+    const failing = {
+      from: () => ({ select: () => ({ eq: () => ({ in: () => ({ gte: async () => ({ error: new Error("down") }) }) }) }) }),
+    };
     await expect(limitLookup(failing as never, USER, "link")).rejects.toThrow("down");
   });
 });
@@ -164,11 +204,11 @@ describe("googleCallGate (monthly cap per SKU)", () => {
   it("counts a manual place's Nearby calls; at the cap it skips Google and uses the country shapes", async () => {
     const { client, tables } = fakeSupabase();
     const fetchMock = mockGoogle([], [PLACE]);
-    expect(await placeArea({ lat: 45.46, lng: 9.19 }, googleCallGate(client, USER))).toMatchObject({ city: "Milan" });
+    expect(await placeArea({ lat: 45.46, lng: 9.19 }, (point) => nearbySearchWithRetry(googleCallGate(client, USER), point))).toMatchObject({ city: "Milan" });
     expect(tables.google_call_log).toHaveLength(2);
 
     tables.google_call_log.push(...calls(4498, "nearby_search", NOW));
-    expect(await placeArea({ lat: 45.46, lng: 9.19 }, googleCallGate(client, USER))).toEqual({
+    expect(await placeArea({ lat: 45.46, lng: 9.19 }, (point) => nearbySearchWithRetry(googleCallGate(client, USER), point))).toEqual({
       city: null,
       country: "Italy",
       country_code: "IT",

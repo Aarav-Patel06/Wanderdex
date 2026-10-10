@@ -7,7 +7,8 @@ import type { PhotoRead } from "../src/lib/trip/read";
 // few are unreadable, as from a real phone.
 // No imports beyond types, so a plain Node script can use it too.
 
-export type SyntheticTrip = { reads: PhotoRead[]; days: number; visits: number; places: number };
+// spots: where the trip's places are (the hotel first), for the benchmark's fake Google.
+export type SyntheticTrip = { reads: PhotoRead[]; days: number; visits: number; places: number; spots: { lat: number; lng: number }[] };
 
 // mulberry32: a small, fast, seeded PRNG.
 function random(seed: number) {
@@ -70,5 +71,5 @@ export function syntheticTrip({ photos = 300, seed = 2026 } = {}): SyntheticTrip
     burst(hotel, time, Math.round(between(1, 3)));
     day++;
   }
-  return { reads, days: day, visits, places: places.length + 1 };
+  return { reads, days: day, visits, places: places.length + 1, spots: [hotel, ...places] };
 }

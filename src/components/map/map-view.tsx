@@ -159,12 +159,14 @@ type PinProps = { id: string; name: string; category: Category };
 
 const pinKey = (id: string | null) => `p:${id}`;
 
-// `focus` is the pin to pan to; a new object each time a visit is saved. `coverTick` changes
+// `focus` is the pin to pan to; a new object each time a visit is saved. `fit` is the pins to fit
+// the map to; a new array each time a Trip Photos import saves. `coverTick` changes
 // when a panel over the map changes (useMapCover), and `coverOpens` when one opens. `drop` is the
 // dropped pin (SPEC §11.4). `centerRef` gets a reader for the map's center (its crosshair).
 export function MapView({
   places,
   focus,
+  fit,
   coverTick,
   coverOpens,
   drop,
@@ -172,6 +174,7 @@ export function MapView({
 }: {
   places: MapPlace[];
   focus: NewPin | null;
+  fit: NewPin[] | null;
   coverTick: number;
   coverOpens: number;
   drop: Drop | null;
@@ -497,6 +500,14 @@ export function MapView({
     };
   }, [map, focus]);
 
+  // A Trip Photos import's pins (SPEC §11.8 step 9): fitted like the start view (SPEC §13.1), in the
+  // part of the map the sidebar leaves uncovered (the camera's padding, which fitBounds adds to).
+  useEffect(() => {
+    if (!map || !fit?.length) return;
+    syncPadding(map);
+    map.fitBounds(startBoundsOf(fit), { padding: FIT_PADDING, maxZoom: START_MAX_ZOOM });
+  }, [map, fit]);
+
   // Drop a pin (SPEC §11.4). The pixel pin, anchored at its tip; it takes no taps, so a tap on it
   // moves it like a tap anywhere else.
   const dropAt = drop?.at ?? null;
@@ -626,7 +637,7 @@ export function MapView({
   );
 }
 
-function startBoundsOf(places: MapPlace[]): LngLatBoundsLike {
+function startBoundsOf(places: NewPin[]): LngLatBoundsLike {
   if (!places.length) return WORLD_BOUNDS;
   const bounds = new LngLatBounds();
   for (const place of places) bounds.extend([place.lng, place.lat]);

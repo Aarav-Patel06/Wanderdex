@@ -1,7 +1,7 @@
-// Trip Photos (SPEC §11.8): its photo limit, reading concurrency, and (later) grouping, matching,
-// grid, and cache values, all in one place. The per-user import limits are in lib/rate-limits.
+// Trip Photos (SPEC §11.8): its photo limit, reading concurrency, and grouping, matching, grid,
+// and cache values, all in one place. The per-user import limits are in lib/rate-limits.
 
-// Until lookups and saving (Phase 4.2) are built, the mode shows only in development builds
+// Until the owner has tested Phase 4.2 and turns it on, the mode shows only in development builds
 // (`next dev`). Next inlines NODE_ENV, so in production builds the flag is false and the mode
 // never shows (its code is still bundled: Turbopack doesn't fold an imported constant).
 export const TRIP_PHOTOS_ENABLED = process.env.NODE_ENV === "development";
@@ -30,3 +30,24 @@ export const MERGE_RADIUS_M = 150;
 // (48 MB for 12 MP), so only a few at a time.
 export const THUMBNAIL_SIZE = 192;
 export const THUMBNAIL_CONCURRENCY = 2;
+
+// Place lookups for an import's stops (SPEC §11.8 step 5). "Your places" are the user's places
+// within YOUR_PLACES_RADIUS_M of a stop (the nearest MAX_YOUR_PLACES); one within
+// LOCAL_MATCH_RADIUS_M answers the stop with no lookup. The other stops within SHARE_RADIUS_M of
+// each other share one lookup. The grid index finds all of these (lib/trip/grid): its cells are at
+// least GRID_CELL_M on a side, so a point's neighbours within that are in its own cell or the 8
+// around it. At most IMPORT_LOOKUP_CONCURRENCY lookups run at once.
+export const YOUR_PLACES_RADIUS_M = 150;
+export const LOCAL_MATCH_RADIUS_M = 50;
+export const SHARE_RADIUS_M = 50;
+export const MAX_YOUR_PLACES = 3;
+export const GRID_CELL_M = 150;
+export const IMPORT_LOOKUP_CONCURRENCY = 5;
+
+// The shared Nearby Search cache (SPEC §17, lib/nearby-cache): a cell is the point's latitude and
+// longitude rounded to NEARBY_CACHE_STEP_DEG (0.0002° is 22 m of latitude, and 18 m of longitude
+// in Tokyo; cell keys keep 4 decimals). A result answers for NEARBY_CACHE_TTL_MS, an empty one
+// (nothing within 150 m) only for NEARBY_CACHE_EMPTY_TTL_MS, since a place may open there.
+export const NEARBY_CACHE_STEP_DEG = 0.0002;
+export const NEARBY_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+export const NEARBY_CACHE_EMPTY_TTL_MS = 7 * 24 * 60 * 60 * 1000;

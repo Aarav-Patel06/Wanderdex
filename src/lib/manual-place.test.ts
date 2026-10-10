@@ -1,12 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { loadCountryShapes } from "@/lib/countries";
-import type { CallGate } from "@/lib/google/places";
+import { type CallGate, nearbySearchWithRetry } from "@/lib/google/places";
 import { countryName, placeArea } from "@/lib/manual-place";
 import { RateLimitError } from "@/lib/rate-limit";
 
-// No monthly cap here (lib/rate-limit has its own tests).
-const noCap: CallGate = async () => {};
+// No monthly cap and no shared cache here (lib/rate-limit and lib/nearby-cache have their own
+// tests): Nearby Search straight to Google.
+const uncached = (gate: CallGate) => (point: { lat: number; lng: number }) => nearbySearchWithRetry(gate, point);
+const noCap = uncached(async () => {});
 
 const NEARBY = "https://places.googleapis.com/v1/places:searchNearby";
 
@@ -110,7 +112,7 @@ describe("placeArea", () => {
     const capped: CallGate = async () => {
       throw new RateLimitError();
     };
-    expect(await placeArea({ lat: 45.4642, lng: 9.19 }, capped, loadCountryShapes)).toEqual({
+    expect(await placeArea({ lat: 45.4642, lng: 9.19 }, uncached(capped), loadCountryShapes)).toEqual({
       city: null,
       country: "Italy",
       country_code: "IT",

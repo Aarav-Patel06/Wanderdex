@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { CATEGORIES, type Category } from "@/lib/categories";
 import { isLocalValue, PRECISIONS } from "@/lib/dates";
+import { IMPORT_MAX_STOPS } from "@/lib/rate-limits";
 
 // Optional rating and note (SPEC §11.5). A note is trimmed, and an empty one is no note. The
 // limits match the visits table's checks (SPEC §8); a JS length counts an emoji as 2, so 2000
@@ -62,6 +63,15 @@ export const manualPlaceSchema = z.object({
 
 export type ManualPlace = z.infer<typeof manualPlaceSchema>;
 
+// A Trip Photos stop (SPEC §11.8 step 8): its import's id (made in the browser) and its number.
+// Stored on the visit, so a retried save finds the visit it already made.
+export const tripStopSchema = z.strictObject({
+  import_id: z.uuid(),
+  stop: z.number().int().min(1).max(IMPORT_MAX_STOPS),
+});
+
+export type TripStopRef = z.infer<typeof tripStopSchema>;
+
 // POST /api/visits (SPEC §11.6) takes one of these shapes, the user's choices plus their category
 // (pre-filled, editable) every time:
 // - `place` from a link or typed text: saved as that source, with its input.
@@ -72,8 +82,12 @@ export type ManualPlace = z.infer<typeof manualPlaceSchema>;
 //   manual ones, SPEC §9). Saved with source "manual" and no source input.
 // - `manual_place`: a new place from a dropped pin, private to the user (SPEC §9). Unsigned, since
 //   it can only ever affect that user. Source "manual", no source input.
+// A Trip Photos stop (SPEC §11.8 step 8) is saved as one of the last three, with `trip`: source
+// "photo" on all three, and a manual place counts toward the import allowance instead of the
+// lookup limits (SPEC §17).
 // The user's choices only affect their own visit row.
 const visitBase = { category: z.enum(CATEGORIES), ...visitChoices };
+const trip = { trip: tripStopSchema.optional() };
 
 export const newVisitSchema = z.union([
   z.object({
@@ -82,9 +96,9 @@ export const newVisitSchema = z.union([
     source: z.enum(["link", "text"]),
     source_input: z.string().trim().min(1).max(2048),
   }),
-  z.object({ place: signedPlaceSchema, ...visitBase, source: z.literal("photo"), source_input: z.null() }),
-  z.object({ place_id: z.uuid(), ...visitBase }),
-  z.object({ manual_place: manualPlaceSchema, ...visitBase }),
+  z.object({ place: signedPlaceSchema, ...visitBase, source: z.literal("photo"), source_input: z.null(), ...trip }),
+  z.object({ place_id: z.uuid(), ...visitBase, ...trip }),
+  z.object({ manual_place: manualPlaceSchema, ...visitBase, ...trip }),
 ]);
 
 export type NewVisit = z.infer<typeof newVisitSchema>;
@@ -128,6 +142,19 @@ export type SavedVisit = {
   return_visit: boolean;
   first_in_country: boolean;
 };
+
+// The user's visit for an import's stop, if it's been saved (SPEC §11.8 step 8).
+export async function findImportVisit(supabase: SupabaseClient, userId: string, { import_id, stop }: TripStopRef) {
+  const { data, error } = await supabase
+    .from("visits")
+    .select(VISIT_COLUMNS)
+    .eq("user_id", userId)
+    .eq("import_id", import_id)
+    .eq("import_stop", stop)
+    .maybeSingle<SavedVisit["visit"]>();
+  if (error) throw error;
+  return data;
+}
 
 // A place by id, if this user can read it (RLS: a Google place, or their own manual place), as
 // /api/visits returns it; null when there's no such place or it's someone else's manual place.

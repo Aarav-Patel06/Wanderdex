@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { CallGate, GoogleSku } from "@/lib/google/places";
-import { GOOGLE_CALLS_PER_MONTH, LOOKUPS_PER_DAY, LOOKUPS_PER_HOUR } from "@/lib/rate-limits";
+import { GOOGLE_CALLS_PER_MONTH, IMPORT_LOOKUPS_PER_DAY, LOOKUPS_PER_DAY, LOOKUPS_PER_HOUR } from "@/lib/rate-limits";
 
 // SPEC §17's rate limits, kept in resolve_log and google_call_log. Both tables are service_role
 // only, so these take the admin client. Each check counts, then logs: two requests at the same
@@ -14,7 +14,10 @@ export class RateLimitError extends Error {
   }
 }
 
-export type LookupKind = "link" | "text" | "nearby";
+// The lookup limits count these kinds only. Trip Photos' lookups are kind "import", with their
+// own allowance (below), so an import neither uses up nor is stopped by these limits.
+const LIMITED_KINDS = ["link", "text", "nearby"] as const;
+export type LookupKind = (typeof LIMITED_KINDS)[number];
 
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -23,10 +26,40 @@ const HOUR_MS = 60 * 60 * 1000;
 // 61st in an hour is the first one refused), otherwise logs it.
 // A rejected request isn't logged, so a user who keeps trying is let back in as the window moves.
 export async function limitLookup(admin: SupabaseClient, userId: string, kind: LookupKind) {
-  const since = (ms: number) => countRows(admin, "resolve_log", "user_id", userId, new Date(Date.now() - ms));
+  const since = async (ms: number) => {
+    const { count, error } = await admin
+      .from("resolve_log")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .in("kind", LIMITED_KINDS)
+      .gte("created_at", new Date(Date.now() - ms).toISOString());
+    if (error) throw error;
+    return count ?? 0;
+  };
   const [hour, day] = await Promise.all([since(HOUR_MS), since(24 * HOUR_MS)]);
   if (hour >= LOOKUPS_PER_HOUR || day >= LOOKUPS_PER_DAY) throw new RateLimitError();
   await insertRow(admin, "resolve_log", { user_id: userId, kind });
+}
+
+// The trip import allowance (SPEC §17): how many more import lookups the user may send to Google
+// now, out of IMPORT_LOOKUPS_PER_DAY in the last 24 hours.
+export async function importLookupsLeft(admin: SupabaseClient, userId: string, now = new Date()) {
+  const used = await countRows(admin, "resolve_log", "user_id", userId, new Date(now.getTime() - 24 * HOUR_MS), "import");
+  return Math.max(0, IMPORT_LOOKUPS_PER_DAY - used);
+}
+
+// One import lookup on its way to Google (a cache miss with allowance left), logged just before
+// its first call.
+export async function logImportLookup(admin: SupabaseClient, userId: string) {
+  await insertRow(admin, "resolve_log", { user_id: userId, kind: "import" });
+}
+
+// For a single Google lookup of an import (an imported stop's manual place): true, logging it, if
+// the allowance has one left; false otherwise, and nothing goes to Google.
+export async function takeImportLookup(admin: SupabaseClient, userId: string) {
+  if ((await importLookupsLeft(admin, userId)) === 0) return false;
+  await logImportLookup(admin, userId);
+  return true;
 }
 
 // The gate the Places client calls before each Google request: throws once that SKU has
@@ -43,12 +76,15 @@ export function monthStartUtc(date: Date) {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
 }
 
-async function countRows(admin: SupabaseClient, table: string, column: string, value: string, since: Date) {
-  const { count, error } = await admin
+// Rows with `column` = value since a moment, and of one `kind` if given (resolve_log).
+async function countRows(admin: SupabaseClient, table: string, column: string, value: string, since: Date, kind?: string) {
+  let query = admin
     .from(table)
     .select("id", { count: "exact", head: true })
     .eq(column, value)
     .gte("created_at", since.toISOString());
+  if (kind) query = query.eq("kind", kind);
+  const { count, error } = await query;
   if (error) throw error;
   return count ?? 0;
 }

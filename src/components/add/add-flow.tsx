@@ -23,7 +23,9 @@ import { IMPORT_MAX_STOPS } from "@/lib/rate-limits";
 import { saveToasts } from "@/lib/save-toasts";
 import { MAX_PHOTOS } from "@/lib/trip/config";
 import { randomUuid } from "@/lib/trip/group";
+import type { ImportResult } from "@/lib/trip/lookup";
 import { readTripPhotos, type TripReading } from "@/lib/trip/read-client";
+import { importToast } from "@/lib/trip/review";
 import type { SavedVisit } from "@/lib/visits";
 
 import "./add.css";
@@ -47,7 +49,7 @@ type Placing = { at: LatLng | null; start: LatLng | null; taken: PhotoTaken | nu
 // the card for the new place, named there.
 export function AddFlow() {
   const router = useRouter();
-  const { addPin, setDrop, mapCenter } = useOverworld();
+  const { addPin, addPins, setDrop, mapCenter } = useOverworld();
   const { open, toggle, close } = useAddVisit();
   const isDesktop = useIsDesktop();
   const bubbleOpen = open && isDesktop;
@@ -66,10 +68,10 @@ export function AddFlow() {
   const [message, setMessage] = useState<PanelMessage | null>(null);
   // The date of a photo without GPS, carried into Type Location (SPEC §11.2 step 3).
   const [photoTaken, setPhotoTaken] = useState<PhotoTaken | null>(null);
-  // Trip Photos (SPEC §11.8): the reading worker while it runs, its progress, and the review of
-  // the stops it found.
+  // Trip Photos (SPEC §11.8): the reading worker while it runs, what it's doing ("Reading photos
+  // 42/300", then "Finding places..."), and the review of the stops it found.
   const tripReading = useRef<TripReading | null>(null);
-  const [tripProgress, setTripProgress] = useState<{ done: number; total: number } | null>(null);
+  const [tripStatus, setTripStatus] = useState<string | null>(null);
   const [review, setReview] = useState<TripReviewData | null>(null);
   const [lookup, setLookup] = useState<Lookup | null>(null);
   const [placing, setPlacing] = useState<Placing | null>(null);
@@ -92,7 +94,7 @@ export function AddFlow() {
     setLoading(false);
     setMessage(null);
     setPhotoTaken(null);
-    setTripProgress(null);
+    setTripStatus(null);
   }, []);
 
   function reset() {
@@ -257,27 +259,41 @@ export function AddFlow() {
     }
   }
 
-  // Trip Photos (SPEC §11.8 steps 1–4): the reading worker reads the picked photos (at most 500)
-  // and groups them into stops; then the review opens in place of the bubble or drawer. Closing
-  // the panel stops the worker (resetPanel).
+  // Trip Photos (SPEC §11.8 steps 1–5): the reading worker reads the picked photos (at most 500)
+  // and groups them into stops; one request then finds places for them all (only each stop's
+  // coordinates and local date go to the server), and the review opens in place of the bubble or
+  // drawer. Closing the panel stops the worker (resetPanel) and drops a lookup still running.
   async function findTrip(files: File[]) {
     if (loading) return;
     const request = ++requests.current;
     setMessage(null);
     if (files.length > MAX_PHOTOS) return setMessage({ kind: "error", text: TOO_MANY_PHOTOS });
     setLoading(true);
-    setTripProgress({ done: 0, total: files.length });
+    setTripStatus(`Reading photos 0/${files.length}`);
     const reading = readTripPhotos(files, (done, total) => {
-      if (request === requests.current) setTripProgress({ done, total });
+      if (request === requests.current) setTripStatus(`Reading photos ${done}/${total}`);
     });
     tripReading.current = reading;
     try {
       const { plan, thumbnails } = await reading.result;
       if (request !== requests.current) return;
+      tripReading.current = null;
       if (plan.kind === "stops") {
-        // A transition, so React yields while rendering the review (SPEC §20's 100 ms).
-        startTransition(() => setReview({ id: randomUuid(), files, stops: plan.stops, skipped: plan.skipped, thumbnails }));
-        close();
+        // The import's id, made once grouping is done (SPEC §11.8 step 8).
+        const id = randomUuid();
+        setTripStatus("Finding places...");
+        const stops = plan.stops.map(({ lat, lng, localDate }) => ({ lat, lng, date: localDate }));
+        const result = await postJson<ImportResult>("/api/resolve/import", { import_id: id, stops });
+        if (request !== requests.current) return;
+        if (result.ok) {
+          // A transition, so React yields while rendering the review (SPEC §20's 100 ms).
+          startTransition(() => setReview({ id, files, stops: plan.stops, skipped: plan.skipped, thumbnails, lookups: result.data }));
+          close();
+        } else if (result.error === "unauthorized") {
+          router.push("/login");
+        } else {
+          setMessage({ kind: "error", text: errorCopy(result.error) });
+        }
       } else {
         const text = plan.kind === "too_many_stops" ? TOO_MANY_STOPS : plan.kind === "no_usable" ? NO_USABLE_PHOTO : TOO_MANY_PHOTOS;
         setMessage({ kind: "error", text });
@@ -290,7 +306,7 @@ export function AddFlow() {
     }
     tripReading.current = null;
     setLoading(false);
-    setTripProgress(null);
+    setTripStatus(null);
   }
 
   // "Can't find it? Drop a pin": the bubble or drawer gets out of the way of the map. From a
@@ -344,6 +360,19 @@ export function AddFlow() {
     router.refresh();
   }
 
+  // After the review's batch save (SPEC §11.8 step 9): one summary toast in place of the per-visit
+  // ones, the new pins, and the map fitted to them. With failures, the review stays open with the
+  // failed stops; otherwise it's done.
+  function tripSaved(saved: SavedVisit[], done: boolean) {
+    if (saved.length) {
+      const { title, ...options } = importToast(saved);
+      toast(title, options);
+      addPins(saved.map(({ place, visit }) => ({ ...place, category: visit.category })));
+      router.refresh();
+    }
+    if (done) setReview(null);
+  }
+
   // The bubble and the drawer show the same panel.
   const panelProps = {
     mode,
@@ -361,7 +390,7 @@ export function AddFlow() {
     loading,
     message,
     photoDate: mode === "text" && photoTaken ? formatTaken(photoTaken) : null,
-    tripProgress,
+    tripStatus,
   };
 
   const card = lookup && (
@@ -440,7 +469,7 @@ export function AddFlow() {
         {card || <AddPanel layout="grid" {...panelProps} inputRef={drawerInput} />}
       </AddDrawer>
 
-      {review && <TripReview review={review} onClose={() => setReview(null)} />}
+      {review && <TripReview review={review} onClose={() => setReview(null)} onSaved={tripSaved} />}
 
       <RpgDialog
         open={unreadable !== null}

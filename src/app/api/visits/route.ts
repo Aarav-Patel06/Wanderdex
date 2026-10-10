@@ -4,11 +4,13 @@ import { errorResponse, readBody, session } from "@/lib/api";
 import type { Category } from "@/lib/categories";
 import { timezoneAt, visitedAtUtc } from "@/lib/dates";
 import { placeArea } from "@/lib/manual-place";
+import { cachedNearby, type NearbyLookup } from "@/lib/nearby-cache";
 import { type PlaceFields, signingSecret, verifyPlace } from "@/lib/place-signature";
-import { googleCallGate, limitLookup, RateLimitError } from "@/lib/rate-limit";
+import { googleCallGate, limitLookup, RateLimitError, takeImportLookup } from "@/lib/rate-limit";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   alignCategory,
+  findImportVisit,
   findReadablePlace,
   isFirstInCountry,
   isReturnVisit,
@@ -22,30 +24,51 @@ import {
 // Saves a visit (SPEC §11.6 steps 1–5), from the confirmation card after a lookup (a signed
 // candidate), for a place that already exists (by id), or at a dropped pin (a new manual place,
 // SPEC §11.4), and says whether it's a return visit and whether it's the user's first in its
-// country, for the client's toasts.
+// country, for the client's toasts. A Trip Photos stop (`trip`, SPEC §11.8 step 8) is saved at most
+// once: a repeated save answers with the visit already saved.
 export async function POST(request: Request) {
   const { supabase, userId } = await session();
   if (!userId) return errorResponse("unauthorized");
 
   const body = await readBody(request, newVisitSchema);
   if (!body) return errorResponse("invalid_input");
+  const trip = "trip" in body ? body.trip : undefined;
 
   try {
+    // Before writing anything: a stop that's already saved (a timeout, a lost response, a double
+    // tap) answers with its visit, so a retry never makes a second visit or manual place.
+    if (trip) {
+      const existing = await findImportVisit(supabase, userId, trip);
+      if (existing) return Response.json(await savedVisit(supabase, userId, existing));
+    }
+
     let place: SavedVisit["place"];
     let source: { source: "link" | "text" | "photo" | "manual"; source_input: string | null };
+    // A manual place made by this request, removed again if the stop turns out to be saved already.
+    let madePlaceId: string | null = null;
     if ("manual_place" in body) {
-      // It calls Nearby Search, so it counts as a lookup (SPEC §17).
       const admin = createAdminClient();
-      await limitLookup(admin, userId, "nearby");
-      place = await createManualPlace(admin, body.manual_place, body.category, userId);
-      source = { source: "manual", source_input: null };
+      const gate = googleCallGate(admin, userId);
+      let nearby: NearbyLookup;
+      if (trip) {
+        // An import's pin: Google only while the import allowance lasts, else the country shapes
+        // (SPEC §17). Not held to the lookup limits.
+        nearby = cachedNearby(admin, gate, () => takeImportLookup(admin, userId));
+      } else {
+        // It calls Nearby Search, so it counts as a lookup (SPEC §17).
+        await limitLookup(admin, userId, "nearby");
+        nearby = cachedNearby(admin, gate);
+      }
+      place = await createManualPlace(admin, body.manual_place, body.category, userId, nearby);
+      madePlaceId = place.id;
+      source = { source: trip ? "photo" : "manual", source_input: null };
     } else if ("place_id" in body) {
       // Nothing about the place is written, so no signature: it only has to exist and be
       // readable by this user under RLS (Google places, or their own manual ones, SPEC §9).
       const found = await findReadablePlace(supabase, body.place_id);
       if (!found) return errorResponse("not_found");
       place = found;
-      source = { source: "manual", source_input: null };
+      source = { source: trip ? "photo" : "manual", source_input: null };
     } else {
       // Only a place /api/resolve/* signed. Without the secret this throws, so nothing is saved.
       const verified = verifyPlace(body.place, signingSecret());
@@ -72,24 +95,44 @@ export async function POST(request: Request) {
         rating: body.rating,
         note: body.note,
         ...source,
+        ...(trip && { import_id: trip.import_id, import_stop: trip.stop }),
       })
       .select(VISIT_COLUMNS)
       .single<SavedVisit["visit"]>();
-    if (error) throw error;
-    // The visit is already saved, so a failed check only changes the toasts: a failed return
-    // check shows "New place discovered!", a failed country check skips the country toast.
-    const [returnCheck, countryCheck] = await Promise.allSettled([
-      isReturnVisit(supabase, { userId, placeId: place.id, visitId: visit.id }),
-      isFirstInCountry(supabase, { userId, visitId: visit.id, countryCode: place.country_code }),
-    ]);
-    const return_visit = settledFlag(returnCheck, "return-visit");
-    const first_in_country = settledFlag(countryCheck, "first-in-country");
-    return Response.json({ place, visit, return_visit, first_in_country } satisfies SavedVisit);
+    if (error) {
+      // Two saves of one stop at once both got past the check above: the unique index
+      // (visits_import_stop_idx) let only one insert through. Answer with that one's visit.
+      const existing = trip && error.code === "23505" ? await findImportVisit(supabase, userId, trip) : null;
+      if (!existing) throw error;
+      if (madePlaceId) await deletePlace(madePlaceId);
+      return Response.json(await savedVisit(supabase, userId, existing));
+    }
+    return Response.json(await savedVisit(supabase, userId, visit, place));
   } catch (error) {
     if (error instanceof RateLimitError) return errorResponse("rate_limited");
     console.error("visits save failed:", error);
     return errorResponse("upstream_error");
   }
+}
+
+// The response for a saved visit: its place (read again under RLS for one saved earlier) and the
+// toasts' flags. The visit is already saved, so a failed check only changes the toasts: a failed
+// return check shows "New place discovered!", a failed country check skips the country toast.
+async function savedVisit(
+  supabase: SupabaseClient,
+  userId: string,
+  visit: SavedVisit["visit"],
+  known?: SavedVisit["place"],
+): Promise<SavedVisit> {
+  const place = known ?? (await findReadablePlace(supabase, visit.place_id));
+  if (!place) throw new Error(`Saved visit ${visit.id} has no readable place`);
+  const [returnCheck, countryCheck] = await Promise.allSettled([
+    isReturnVisit(supabase, { userId, placeId: place.id, visitId: visit.id }),
+    isFirstInCountry(supabase, { userId, visitId: visit.id, countryCode: place.country_code }),
+  ]);
+  const return_visit = settledFlag(returnCheck, "return-visit");
+  const first_in_country = settledFlag(countryCheck, "first-in-country");
+  return { place, visit, return_visit, first_in_country };
 }
 
 function settledFlag(result: PromiseSettledResult<boolean>, check: string) {
@@ -107,8 +150,9 @@ async function createManualPlace(
   { name, lat, lng }: ManualPlace,
   category: Category,
   userId: string,
+  nearby: NearbyLookup,
 ): Promise<SavedVisit["place"]> {
-  const area = await placeArea({ lat, lng }, googleCallGate(admin, userId));
+  const area = await placeArea({ lat, lng }, nearby);
   const { data, error } = await admin
     .from("places")
     .insert({
@@ -127,6 +171,13 @@ async function createManualPlace(
     .single<SavedVisit["place"]>();
   if (error) throw error;
   return data;
+}
+
+// A manual place this request made for a stop that another save of the same stop got to first.
+// Nothing refers to it yet. If deleting fails, it stays, unused and private (as above).
+async function deletePlace(placeId: string) {
+  const { error } = await createAdminClient().from("places").delete().eq("id", placeId);
+  if (error) console.error("removing a duplicate manual place failed:", error);
 }
 
 // places is shared and the browser can't write it, so this uses the secret key. A new Google
