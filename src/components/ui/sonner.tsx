@@ -8,8 +8,8 @@ import { Toaster as Sonner, type ToasterProps } from "sonner"
 // mobileOffset (sonner's layout below 600px): level with the Overworld's avatar button and
 // left of it, so toasts cover neither it nor the map controls under it, and they're far from
 // the tab bar at the bottom. The 6px is the toast's pixel border, drawn outside it; the right
-// offset clears the 44px avatar, its 4px shadow, and a 12px gap. The width rule that goes
-// with it is in globals.css.
+// offset clears the 52px avatar (on the Overworld and My Visits), its 4px shadow, and a 12px
+// gap. The width rule that goes with it is in globals.css.
 const Toaster = ({ ...props }: ToasterProps) => {
   return (
     <Sonner
@@ -21,7 +21,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
       mobileOffset={{
         top: "calc(1rem + 6px + env(safe-area-inset-top))",
         left: "calc(1rem + 6px + env(safe-area-inset-left))",
-        right: "calc(1rem + 66px + env(safe-area-inset-right))",
+        right: "calc(1rem + 74px + env(safe-area-inset-right))",
       }}
       {...props}
     />

@@ -1,0 +1,15 @@
+/* Profile (SPEC §14.6): the pins-per-category bars. Palette tokens only (SPEC §16.2), whole
+   pixels. */
+
+/* A plain box: accent with a 2px text border, as long as its share of the row (--share, 0–1),
+   in whole 4px steps so its end sits on the pixel grid. At least 4px, so a count of 1 shows.
+   The first width is for browsers without round(). */
+.category-bar {
+  display: block;
+  height: 16px;
+  min-width: 4px;
+  border: 2px solid var(--text);
+  background: var(--accent);
+  width: calc(var(--share) * 100%);
+  width: round(down, calc(var(--share) * 100%), 4px);
+}

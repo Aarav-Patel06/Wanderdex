@@ -3,7 +3,9 @@ import type { Metadata } from "next";
 import { loadVisits } from "@/app/(app)/visits/actions";
 import { FilterBar } from "@/app/(app)/visits/filter-bar";
 import { VisitList } from "@/app/(app)/visits/visit-list";
+import { AvatarLink } from "@/components/shell/avatar";
 import { readAllPages } from "@/lib/paging";
+import { currentProfile } from "@/lib/profile";
 import { createClient } from "@/lib/supabase/server";
 import { filterOptions, filtersSearch, hasFilters } from "@/lib/visit-filters";
 import { filtersFromSearchParams } from "@/lib/visit-filters-schema";
@@ -15,13 +17,21 @@ export const metadata: Metadata = { title: "My Visits · Wanderdex" };
 // My Visits (SPEC §14.3): newest visit first, 30 at a time, filtered by the URL query.
 export default async function VisitsPage({ searchParams }: PageProps<"/visits">) {
   const filters = filtersFromSearchParams(await searchParams);
-  const [options, first] = await Promise.all([loadFilterOptions(), loadVisits(filters, 0)]);
+  const [{ username }, options, first] = await Promise.all([
+    currentProfile(),
+    loadFilterOptions(),
+    loadVisits(filters, 0),
+  ]);
 
   return (
     // Full content width. Mobile: the title sits below the status bar (the viewport runs under it).
     <section className="flex flex-col gap-6 px-4 pt-[calc(2rem+env(safe-area-inset-top))] pb-8 md:px-8 md:pt-8">
       <header className="flex flex-col gap-2">
-        <h1>My Visits</h1>
+        {/* Phones: the avatar button at the title row's end, the title H2-sized so both fit. */}
+        <div className="flex items-center justify-between gap-4">
+          <h1 className="text-h2 md:text-h1">My Visits</h1>
+          <AvatarLink username={username} />
+        </div>
         <p className="text-small">Every place you&apos;ve explored.</p>
         {/* A 4px line ending in an accent sparkle (visits.css). */}
         <div aria-hidden="true" className="visits-divider mt-2" />

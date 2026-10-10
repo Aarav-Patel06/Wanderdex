@@ -599,8 +599,8 @@ export function MapView({
         )
       )}
 
-      {/* Mobile: below the avatar menu button (top-right, 44px + shadow), with the same inset from
-          the edge. Desktop: top-right, left of the confirmation panel while it's open
+      {/* Mobile: below the avatar button (top-right, 44px + shadow, 52px wide like these buttons
+          with their borders), with the same right edge, so the two form one column. Desktop: top-right, left of the confirmation panel while it's open
           (--map-right, map.css). The icon buttons' pixel border sits 4px outside them, hence
           mr-1: the border's outer edge lines up with the avatar's. z-10 keeps them above the
           legend and the popups. */}

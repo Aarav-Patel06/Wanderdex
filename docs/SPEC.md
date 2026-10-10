@@ -1,7 +1,7 @@
 # Wanderdex: Project Specification
 
 **Version:** 1.3 (2026-10-06)
-**Status:** Core build (Phases 1–3) done and live at `wanderdex.vercel.app`. Phase 4 (Trip Photos import, Profile, passport secret; §20): Trip Photos (4.1, 4.2) done and live; the rest is specified, not built. Everything in §21 "Later" is out of scope.
+**Status:** Core build (Phases 1–3) done and live at `wanderdex.vercel.app`. Phase 4 (Trip Photos import, Profile, passport secret; §20): Trip Photos (4.1, 4.2) and the profile's stats and navigation (4.3) done; the rest is specified, not built. Everything in §21 "Later" is out of scope.
 **Owner:** Aarav Patel. Personal student / portfolio project.
 
 ---
@@ -645,7 +645,7 @@ Display labels: "Food", "Cafe", "Bar", "Museum", "Landmark", "Park & Nature", "S
   - **RPG cursor:** a "▶" marker beside the item under the mouse, else the keyboard-focused one, else the current page's. The current page's item keeps the `primary` fill. The profile item behaves like the others (hover, press, cursor, `primary` on `/profile`).
   - **Hover and press:** hover lifts an item up-left onto a larger offset shadow; press pushes it flat (it moves by the full shadow offset and the shadow goes to 0), like the buttons. The shadow is `accent`, which shows on the dark box. Add Visit adds a call to action on hover (a pixel sparkle and a flat shine band), and on click its + icon spins round in steps.
   - **Add Visit** toggles the add bubble on the Overworld (§14.2). From another page it navigates to `/` and opens the bubble.
-- **Mobile:** bottom tab bar with **Overworld**, **My Visits**, **Add Visit** (opens the drawer), with Pixelarticons icons and 8px Press Start 2P labels. Same visual language as the sidebar: dark fill down to the bottom screen edge (safe area), an `accent` pixel border along its top edge, the active tab in `accent` with the "▶" marker beside its icon, and a press animation on tap. Tabs stay at least 44px tall. A small **avatar button** (the user's initial in a pixel frame) in the top-right corner of the Overworld and My Visits opens `/profile`. There's no avatar menu: Log out lives in the profile's Account section (§14.6).
+- **Mobile:** bottom tab bar with **Overworld**, **My Visits**, **Add Visit** (opens the drawer), with Pixelarticons icons and 8px Press Start 2P labels. Same visual language as the sidebar: dark fill down to the bottom screen edge (safe area), an `accent` pixel border along its top edge, the active tab in `accent` with the "▶" marker beside its icon, and a press animation on tap. Tabs stay at least 44px tall. A small **avatar button** (the user's initial in a pixel frame) in the top-right corner of the Overworld and My Visits opens `/profile`. It's 44px tall and 52px wide, exactly as wide as the map's zoom and legend buttons with their pixel borders, and on the Overworld it shares their right edge, so the four form one column; press pushes it flat, like the buttons. There's no avatar menu: Log out lives in the profile's Account section (§14.6).
 
 ### 14.2 Overworld (`/`)
 - **Desktop:** the map fills the window, full-bleed behind the floating sidebar. There is no always-visible add panel. Pressing Add Visit in the sidebar opens the add panel ("Add Anything") as a speech bubble next to the sidebar, its stepped pixel tail pointing at the Add Visit item: a cream pixel card on `surface` like the pin popup (§13.4). It holds the four mode buttons as a vertical menu, with the "▶" cursor on the hovered or focused one. Choosing a mode turns the same bubble into that mode's input (e.g. the link field + Find), with a Back button to the menu. After a successful lookup the bubble closes and the confirmation card opens as a side panel over the map, on the right (Trip Photos opens its review screen instead, §11.8). The bubble closes on Escape, a click outside it, or pressing Add Visit again; closing it clears its input.
@@ -683,13 +683,14 @@ As in the sheet (logo, "WANDERDEX", tagline "Collect places. Build your world.")
 
 ### 14.6 Profile (`/profile`)
 - **Reached from** the desktop sidebar's profile item and the phone avatar button (§14.1). A cream page with the background art (§16.7); desktop content sits right of the sidebar. One column, fitting 375px.
-- **Header:** the user's initial in a pixel frame (as in the sidebar), the username (H1 from `md`, H2 on phones), "Joined <Month YYYY>" (Small, from `profiles.created_at`), and the passport sprite at a whole-number scale, which is also the passport secret's trigger on every device (§15.1).
-- **Stats** (pixel tiles on `surface`): **Places discovered** (distinct places the user has visits at), **Countries** X/195, **Continents** X/7, **Total visits**, **First visit** (the place of the earliest `visited_at`, linking to its page, and that date at its precision, in its zone). With no visits: zeros, and "--" for First visit.
+- **Header:** the user's initial in a pixel frame (as in the sidebar), the username (H1 from `md`, H2 on phones; a long one wraps anywhere), "Joined <Month YYYY>" (Small, from `profiles.created_at`, in UTC), and the passport sprite at a whole-number scale (64px on phones, 96px from `md`), which is also the passport secret's trigger on every device (§15.1).
+- **Stats** (pixel tiles on `surface`, two columns at every width): **Places discovered** (distinct places the user has visits at), **Countries** X/195, **Continents** X/7, **Total visits**, and a full-width **First visit** tile (the place of the earliest `visited_at`, ties by the earliest logged, linking to its page, with its sprite and that date at its precision, in its zone). With no visits: zeros, and "--" for First visit.
 - **Countries:** the 195 are the 193 UN member states plus Vatican City (`VA`) and Palestine (`PS`). For each visited place's `country_code`:
   - one of the 195 counts as itself;
   - a territory with a clear sovereign counts toward it (e.g. `HK`, `MO` → `CN`; `PR`, `GU` → `US`; `GF`, `RE` → `FR`);
   - a partially recognized or disputed place (e.g. `TW`, `XK`, `EH`) counts as itself and is never merged into another state;
-  - Antarctica (`AQ`) counts toward no country; a place without a `country_code` doesn't count.
+  - Antarctica (`AQ`) counts toward no country (its continent still counts); a place without a `country_code`, or with a code outside the tables, doesn't count.
+  - Free association and administered territories count toward the state responsible for them: `CK`, `NU` → `NZ`; `FK` → `GB`.
   - The denominator stays 195 (the disputed places could push the count past it only in theory).
 - **Continents:** 7 (Africa, Antarctica, Asia, Europe, North America, Oceania, South America), from a static table by country code, using the UN geoscheme for transcontinental countries (e.g. Russia → Europe; Türkiye, Cyprus, and the Caucasus → Asia; Egypt → Africa). North America is the geoscheme's Northern America, Central America, and Caribbean. A territory counts for the continent it's on (French Guiana → South America), not its sovereign's.
 - Both tables are static data modules in `src/lib/stats/`, unit tested: exactly 195 states, every ISO 3166-1 alpha-2 code (plus `XK`) classified, and the examples above.
@@ -697,6 +698,7 @@ As in the sheet (logo, "WANDERDEX", tagline "Collect places. Build your world.")
   - **Pins per category:** a pixel-style bar chart (plain boxes in tokens, no chart library): a row per category that has pins, most first (ties in §12.5 order), each with its 32px sprite, label, a bar proportional to the count, and the count. A place counts once, under the user's category for it (the pin's, §8).
   - **Most revisited:** the top 5 places by the user's visit count, among places with at least 2 visits (ties: most recent visit first), each with sprite, name, city/country, and "N visits", linking to `/places/[id]`. None yet: "No return visits yet."
   - No recents section (My Visits covers it).
+  - No visits at all: the travel stats are one panel, "No pins yet, traveler. Your adventure starts on the Overworld!".
 - **Account:**
   - **Change password:** Current password, New password, Confirm new password (min 6, max 72 characters, no other rules, §10), with the warning "Passwords can't be recovered. Pick one you'll remember." The server verifies the current password first (a sign-in with it); a wrong one shows "That's not your current password." and nothing changes. Success: toast "Password changed!"; the user stays logged in.
   - **Export data:** "Download CSV" and "Download JSON": the user's visits with place details, one row per visit, newest first: date (local, at its precision), precision, time zone, rating, note, category, source, source input, place name, address, city, country, country code, latitude, longitude, Google place id. The files are built in the browser from the user's own data, read on the server under their session (RLS, paging helper); nothing goes to any other service. Names: `wanderdex-visits-YYYY-MM-DD.csv` / `.json`.
@@ -946,7 +948,7 @@ The owner is in a rush. Target roughly **two weeks** for the core build; these a
 - README with setup steps (PowerShell commands).
 - **Done when:** the app matches the design sheet (with §16.9 overrides) and passes the QA checklist.
 
-### Phase 4: Trip Photos, Profile, passport secret: in progress (4.1 and 4.2 done)
+### Phase 4: Trip Photos, Profile, passport secret: in progress (4.1–4.3 done)
 - **4.1 Trip Photos: reading, grouping, and the review screen** (§11.8 steps 1–4 and 7): done (2026-10-10). Local only, no lookups yet. Every push deploys to production, so the mode showed only in development builds behind one flag, `TRIP_PHOTOS_ENABLED` (`NODE_ENV === "development"`), until the owner had tested 4.2; removed 2026-10-10, so every build shows four modes. **First:** a quick check on the owner's iPhone that a multi-select from Safari's picker keeps GPS (single photos already do, §22). Done 2026-10-06: 38 picked, all 36 regular photos read with location and date; the 2 ProRAW DNGs were refused by the file-type check, now supported (§11.2). Then the fourth mode, multi-select and drop, the reading Web Worker with bounded concurrency and progress, skipping and its summary, grouping, the review with stops, thumbnails, and the leave warning; and the benchmark's synthetic trip generator with its grouping report.
 - **4.2 Trip Photos: lookups and saving** (§11.8 steps 5–6 and 8–11, §17): done (2026-10-10), in this order:
   1. The migration: `nearby_cache`, `import_log`, and `visits.import_id` / `import_stop` with their unique index (§8, §9). Stop until the owner confirms it's applied.
@@ -954,8 +956,8 @@ The owner is in a rush. Target roughly **two weeks** for the core build; these a
   3. The shared lookup cache, used by every Nearby Search (imports, Upload Photo, dropped pins).
   4. Idempotent batch save, the lookup counts in the review, the summary toast, and fitting the map to the new pins.
   5. The benchmark's lookup report (cold and warm cache) and `docs/ARCHITECTURE.md`.
-- **4.3 Profile: stats and navigation** (§14.6, §14.1): the page, its stats and travel stats, the country and continent tables, the sidebar's profile item, the phone avatar button on the Overworld and My Visits (the avatar menu goes away).
-- **4.4 Profile: account actions** (§14.6): change password, export data, delete account, log out. Confirm that `google_call_log.user_id` is `on delete set null` in the live database (it is in `20261004000000_google_call_log.sql`); a migration is needed only if it isn't.
+- **4.3 Profile: stats and navigation** (§14.6, §14.1): done (2026-10-10). The page, its stats and travel stats, the country and continent tables, the sidebar's profile item, the phone avatar button on the Overworld and My Visits (the avatar menu is gone), and the Account section's Log out.
+- **4.4 Profile: account actions** (§14.6): change password, export data, delete account (Log out came with 4.3). Confirm that `google_call_log.user_id` is `on delete set null` in the live database (it is in `20261004000000_google_call_log.sql`); a migration is needed only if it isn't.
 - **4.5 Passport secret** (§15.1).
 - **Done when:**
   - A trip's photos import as visits on phone and desktop, with no photo data leaving the device (checked in the network log, as in Phase 2) and no duplicates on re-import ("Already logged") or on a retried save (idempotency).

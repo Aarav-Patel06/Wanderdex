@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 
 import Image from "next/image";
 import Link from "next/link";
@@ -10,17 +10,11 @@ import { Map as MapIcon } from "pixelarticons/react/Map";
 import { Notes } from "pixelarticons/react/Notes";
 import { Plus } from "pixelarticons/react/Plus";
 
-import { logout } from "@/app/(app)/actions";
 import { AddVisitProvider, useAddVisitController } from "@/components/add/add-visit-context";
-import { RpgDialog } from "@/components/dialogs/rpg-dialog";
 import { PageBackground } from "@/components/page-background";
+import { AvatarLink, UserInitial } from "@/components/shell/avatar";
 import { useTrackNavigation } from "@/components/shell/back-button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/8bit/dropdown-menu";
+import { LogoutDialog } from "@/components/shell/logout-dialog";
 import { cn } from "@/lib/utils";
 
 import "./shell.css";
@@ -33,17 +27,17 @@ const NAV_LINKS = [OVERWORLD, MY_VISITS] as const;
 const sidebarItem =
   "nav-item flex min-h-11 flex-1 items-center gap-3 px-3 text-left font-display text-button";
 
-// Minimal app shell (SPEC §14.1): desktop sidebar, mobile bottom tab bar, and a
-// mobile avatar menu on the Overworld. Log out always goes through the RPG dialog.
+// App shell (SPEC §14.1): desktop sidebar, mobile bottom tab bar, and the phones' avatar button
+// on the Overworld (My Visits puts it in its title row). Log out always goes through the RPG
+// dialog.
 export function AppShell({ username, children }: { username: string; children: React.ReactNode }) {
   const pathname = usePathname();
   const [logoutOpen, setLogoutOpen] = useState(false);
-  const [leaving, startLeaving] = useTransition();
   const [spinning, setSpinning] = useState(false);
   const addVisit = useAddVisitController();
   useTrackNavigation();
   const addPanelOpen = addVisit.open && pathname === "/";
-  const initial = username.charAt(0).toUpperCase();
+  const onProfile = pathname === "/profile";
 
   return (
     <div className="flex h-dvh flex-col md:flex-row">
@@ -110,9 +104,25 @@ export function AppShell({ username, children }: { username: string; children: R
 
           <div className="mt-auto flex flex-col gap-4">
             <hr className="border-0 border-t-2 border-accent" />
-            <div className="flex min-w-0 items-center gap-3 pl-6">
-              <UserInitial initial={initial} />
-              <span className="truncate">{username}</span>
+            {/* The profile item (SPEC §14.6): the initial and the username, in the body font so
+                a 20-character name fits before it truncates. */}
+            <div className="nav-row flex min-w-0 items-center gap-2">
+              <NavCursor />
+              <Link
+                href="/profile"
+                aria-current={onProfile ? "page" : undefined}
+                className={cn(
+                  sidebarItem,
+                  "min-w-0 py-1",
+                  onProfile ? "bg-primary text-on-primary" : "hover:bg-background/10",
+                )}
+              >
+                <UserInitial username={username} />
+                <span className="truncate font-body text-body">
+                  <span className="sr-only">Profile: </span>
+                  {username}
+                </span>
+              </Link>
             </div>
             <div className="nav-row flex items-center gap-2">
               <NavCursor />
@@ -143,23 +153,13 @@ export function AppShell({ username, children }: { username: string; children: R
         <AddVisitProvider value={addVisit}>{children}</AddVisitProvider>
 
         {pathname === "/" && (
-          // modal={false}: the menu hands off to the RPG dialog without the two fighting over focus.
-          <DropdownMenu modal={false}>
-            <DropdownMenuTrigger
-              // The pin popup keeps clear of it, like the map controls under it (map-view.tsx).
-              data-map-control
-              aria-label={`${username} menu`}
-              className="user-menu absolute top-[calc(1rem+env(safe-area-inset-top))] right-[calc(1rem+env(safe-area-inset-right))] shadow-pixel md:hidden"
-            >
-              <UserInitial initial={initial} />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onSelect={() => setLogoutOpen(true)}>
-                <Logout aria-hidden="true" className="size-6" />
-                Log out
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          // Its right edge is the map controls' (map-view.tsx), so the two form one column. The
+          // pin popup keeps clear of it, as of them (data-map-control).
+          <AvatarLink
+            username={username}
+            data-map-control
+            className="absolute top-[calc(1rem+env(safe-area-inset-top))] right-[calc(1rem+env(safe-area-inset-right))]"
+          />
         )}
       </main>
 
@@ -199,20 +199,7 @@ export function AppShell({ username, children }: { username: string; children: R
         </button>
       </nav>
 
-      <RpgDialog
-        open={logoutOpen}
-        onOpenChange={setLogoutOpen}
-        title="Leave the Overworld?"
-        choices={[
-          {
-            label: "Yes",
-            onSelect: () => {
-              if (!leaving) startLeaving(() => logout());
-            },
-          },
-          { label: "No", onSelect: () => setLogoutOpen(false) },
-        ]}
-      />
+      <LogoutDialog open={logoutOpen} onOpenChange={setLogoutOpen} />
     </div>
   );
 }
@@ -260,18 +247,6 @@ function NavCursor() {
   return (
     <span aria-hidden="true" className="nav-cursor w-4 shrink-0 font-display text-button text-accent">
       ▶︎
-    </span>
-  );
-}
-
-// The user's initial in a pixel frame.
-function UserInitial({ initial }: { initial: string }) {
-  return (
-    <span
-      aria-hidden="true"
-      className="flex size-11 shrink-0 items-center justify-center border-4 border-accent bg-primary font-display text-button text-on-primary"
-    >
-      {initial}
     </span>
   );
 }

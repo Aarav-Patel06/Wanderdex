@@ -266,11 +266,16 @@
   box-shadow: inset var(--focus-ring);
 }
 
-/* The Overworld's avatar menu button (phones) keeps its offset shadow under the focus ring. */
-.user-menu:focus-visible {
+/* The phones' avatar button (avatar.tsx) keeps its offset shadow under the focus ring. Press
+   pushes it flat, by the full 4px shadow offset, instantly, like the buttons. */
+.avatar-link:focus-visible {
   box-shadow:
     var(--focus-ring),
     4px 4px 0 var(--text);
+}
+.avatar-link:active {
+  translate: 4px 4px;
+  box-shadow: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
