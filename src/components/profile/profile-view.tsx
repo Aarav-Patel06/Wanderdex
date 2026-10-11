@@ -1,12 +1,13 @@
 import { formatInTimeZone } from "date-fns-tz";
-import Image from "next/image";
 
+import { ProfilePassport } from "@/components/passport/profile-passport";
 import { AccountSection } from "@/components/profile/account-section";
 import { CategoryBars, FirstVisit, PlaceRow, StatTile } from "@/components/profile/profile-stats";
 import { UserInitial } from "@/components/shell/avatar";
 import { formatVisited } from "@/lib/dates";
 import { CONTINENTS } from "@/lib/stats/continents";
 import { STATE_COUNT } from "@/lib/stats/countries";
+import { passportData } from "@/lib/stats/passport";
 import type { ProfileStats } from "@/lib/stats/profile";
 
 // Its rows and panels are My Visits' (visit-link, visits-panel).
@@ -36,15 +37,7 @@ export function ProfileView({
           {/* profiles.created_at, in UTC: the server doesn't know the user's zone. */}
           {joined && <p className="text-small">Joined {formatInTimeZone(joined, "UTC", "MMMM yyyy")}</p>}
         </div>
-        {/* 2×, 3× from md. The passport secret's trigger in Phase 4.5 (SPEC §15.1). */}
-        <Image
-          src="/sprites/passport.png"
-          alt=""
-          width={96}
-          height={96}
-          unoptimized
-          className="pixelated size-16 shrink-0 md:size-24"
-        />
+        <ProfilePassport data={passportData(stats)} />
       </header>
 
       <section aria-labelledby="stats-title" className="flex flex-col gap-4">

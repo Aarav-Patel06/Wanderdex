@@ -1,0 +1,42 @@
+/* A passport secret trigger's sprite (SPEC §15.1): the first activation wiggles it, the second
+   flips it, both in steps. With reduced motion, neither. */
+
+[data-passport-step="wiggle"] {
+  animation: passport-wiggle 0.4s steps(1);
+}
+@keyframes passport-wiggle {
+  0% {
+    rotate: -8deg;
+  }
+  25% {
+    rotate: 8deg;
+  }
+  50% {
+    rotate: -4deg;
+  }
+  75% {
+    rotate: 4deg;
+  }
+  100% {
+    rotate: 0deg;
+  }
+}
+
+/* A full turn about its vertical axis, in 6 steps of 60°. */
+[data-passport-step="flip"] {
+  animation: passport-turn 0.48s steps(6);
+}
+@keyframes passport-turn {
+  from {
+    transform: perspective(400px) rotateY(0deg);
+  }
+  to {
+    transform: perspective(400px) rotateY(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-passport-step] {
+    animation: none;
+  }
+}

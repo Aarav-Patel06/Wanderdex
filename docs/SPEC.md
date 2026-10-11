@@ -1,7 +1,7 @@
 # Wanderdex: Project Specification
 
 **Version:** 1.3 (2026-10-06)
-**Status:** Core build (Phases 1–3) done and live at `wanderdex.vercel.app`. Phase 4 (Trip Photos import, Profile, passport secret; §20): Trip Photos (4.1, 4.2), the profile's stats and navigation (4.3), and its account actions (4.4) done; the passport secret (4.5) is specified, not built. Everything in §21 "Later" is out of scope.
+**Status:** Core build (Phases 1–3) done and live at `wanderdex.vercel.app`. Phase 4 (Trip Photos import, Profile, passport secret; §20) done (2026-10-11). Everything in §21 "Later" is out of scope.
 **Owner:** Aarav Patel. Personal student / portfolio project.
 
 ---
@@ -131,7 +131,7 @@ Browser (Next.js client)
         ▼
 Next.js server (Vercel)
  ├─ Pages + Server Functions → read the user's data with their session (RLS); login, signup, logout;
- │                             profile stats, change password
+ │                             profile stats, change password, the passport secret's numbers
  ├─ /api/export          → the user's visits with their places, for the profile's downloads (§14.6)
  ├─ /api/account (DELETE) → delete account: session, typed username, then the admin API (§14.6)
  ├─ /api/resolve/link    → expand link, parse, Google Text Search
@@ -723,9 +723,10 @@ As in the sheet (logo, "WANDERDEX", tagline "Collect places. Build your world.")
 Nothing else (no sounds, XP, levels, or stamps).
 
 ### 15.1 The passport secret
-- **Triggers:** the desktop sidebar's passport logo, and the profile's passport sprite (every device, §14.6). Clicks (or taps, or Enter) within ~1.5 s of each other: the first wiggles the passport, the second flips it, the third opens the secret. Two clicks and then nothing do nothing more. The sidebar logo still links to `/`: its navigation waits ~350 ms after a click and happens only if no second click follows, so a single click still navigates. A modified click (Ctrl/Cmd, middle button) opens the link as usual and isn't counted.
-- **The secret:** a modal overlay (the dialog overlay, §16.6) where the passport (the sprite at a whole-number scale) flips open with CSS 3D transforms (`rotateY` in `steps()`, so it moves in pixel-feeling frames) into a two-page spread of cream (`background`) pages with pixel borders, pixel sparkles, and a shine (a flat band, no gradient, like Add Visit's). Left page: **Countries** X/195 and **Continents** X/7. Right page: **Pins** (places) and **First pin** (name and date). The values are the profile's (§14.6): on the profile they're already loaded; from the sidebar they're fetched when the secret opens (a Server Function sharing the profile's code), with the loading dots in their place until they arrive.
-- **Closing:** Escape, a click outside the spread, or a close button. An accessible dialog (on the Radix Dialog already installed): labelled "Passport", focus moves into it and stays there, and returns to the trigger on close.
+- **Triggers:** the desktop sidebar's passport logo, and the profile's passport sprite (a button labelled "Passport", every device, §14.6). Activations (clicks, taps, Enter, or Space) within ~1.5 s of each other (1,500 ms, measured from the previous one): the first wiggles the passport (a stepped tilt), the second flips it (a full stepped turn about its vertical axis), the third opens the secret. A longer gap starts the count over, and so does opening it. Two clicks and then nothing do nothing more. The sidebar logo still links to `/`: its navigation waits ~350 ms after a click and happens only if no second click follows, so a single click still navigates. A modified click (Ctrl/Cmd, Shift, Alt, middle button) opens the link as usual and isn't counted. The counting is `src/lib/passport-clicks.ts` (unit tested).
+- **The secret:** a modal overlay (the dialog overlay, §16.6) where the passport (the sprite at a whole-number scale: 6× on phones, a 300px spread; 8× from `md`, 400px; each page is the cover's 25 × 28 sprite pixels) flips open with CSS 3D transforms (`rotateY` in `steps()`, so it moves in pixel-feeling frames, with `backface-visibility` so the cover's outside and the left page are its two sides) into a two-page spread of cream (`background`) pages with pixel borders. First a shine (a flat band, no gradient, like Add Visit's, masked to the sprite) crosses the closed cover; then the cover turns on its spine in five steps while the book slides to center the spread; then the sparkle sprites (`bg/sparkle_3.png`, `bg/sparkle_5.png`) around the spread twinkle on and off in steps. Left page: **Countries** X/195 and **Continents** X/7, over the passport stamp sprite (`bg/passport_stamp.png`). Right page: **Pins** (places) and **First pin** (name and date at its precision, or "--"). The values are the profile's (§14.6): on the profile they're already loaded; from the sidebar a Server Function sharing the profile's code fetches them on each count's first activation, so they're usually ready by the third, with the shared loading dots in their place until they arrive.
+- **Loading:** the overlay's code (and its CSS) is its own chunk, loaded on a trigger's first activation, so it adds nothing to a normal page load.
+- **Closing:** Escape, a click outside the spread, or a close button (a 44px pixel icon button above the spread's right end). An accessible dialog (on the Radix Dialog already installed): labelled "Passport", focus moves into it (to the close button) and stays there, and returns to the trigger on close.
 - **Reduced motion:** no wiggle, flip, or opening animation; the third click shows the open spread at once, and the sparkles stay still.
 - No animation library, no new dependencies, no sound. It's the one dialog not in the RPG style (§3).
 
@@ -907,6 +908,7 @@ Toasts auto-dismiss after ~4 s and have a close (×) button. Copy is in §11.6 a
   - Trip Photos (§11.8): skipping (no GPS, no date, unreadable), grouping into stops (distance, time gap, same-day merge, time order, centroid, first photo's time, time zone day boundaries, the 500-photo and 150-stop limits), the worker's protocol (batches, progress, results, failures, cancelling), the review's made-thumbnail queue (the worker starts only when needed, at most a few at a time, a waiting request can be dropped, a failed worker gives the sprite), the grid index (same answers as comparing every pair, including across cell edges and at high latitudes), sharing lookups within 50 m, the local-first match, the lookup cache (cell rounding, hit, miss, 30-day expiry, re-sorting, empty results and their 7-day expiry), the per-layer counts, "Already logged" by precision, and an idempotent save (a repeated save of one stop leaves one visit and one manual place).
   - Country and continent tables (§14.6): exactly 195 states, every ISO 3166-1 code classified, the listed examples; the profile stats.
   - Account actions (§14.6): CSV escaping and the formula-injection guard, the export's shape, the username match, and the delete order.
+  - The passport secret (§15.1): the click counting (the window, starting over, the single-click navigation delay) and its numbers.
 - **Manual device checklist (every phase):**
   - Phone at 375px (Chrome and Safari) and desktop (Chrome).
   - Add via each mode, including a photo with GPS and one without.
@@ -954,7 +956,7 @@ The owner is in a rush. Target roughly **two weeks** for the core build; these a
 - README with setup steps (PowerShell commands).
 - **Done when:** the app matches the design sheet (with §16.9 overrides) and passes the QA checklist.
 
-### Phase 4: Trip Photos, Profile, passport secret: in progress (4.1–4.4 done)
+### Phase 4: Trip Photos, Profile, passport secret: done (2026-10-11)
 - **4.1 Trip Photos: reading, grouping, and the review screen** (§11.8 steps 1–4 and 7): done (2026-10-10). Local only, no lookups yet. Every push deploys to production, so the mode showed only in development builds behind one flag, `TRIP_PHOTOS_ENABLED` (`NODE_ENV === "development"`), until the owner had tested 4.2; removed 2026-10-10, so every build shows four modes. **First:** a quick check on the owner's iPhone that a multi-select from Safari's picker keeps GPS (single photos already do, §22). Done 2026-10-06: 38 picked, all 36 regular photos read with location and date; the 2 ProRAW DNGs were refused by the file-type check, now supported (§11.2). Then the fourth mode, multi-select and drop, the reading Web Worker with bounded concurrency and progress, skipping and its summary, grouping, the review with stops, thumbnails, and the leave warning; and the benchmark's synthetic trip generator with its grouping report.
 - **4.2 Trip Photos: lookups and saving** (§11.8 steps 5–6 and 8–11, §17): done (2026-10-10), in this order:
   1. The migration: `nearby_cache`, `import_log`, and `visits.import_id` / `import_stop` with their unique index (§8, §9). Stop until the owner confirms it's applied.
@@ -964,7 +966,7 @@ The owner is in a rush. Target roughly **two weeks** for the core build; these a
   5. The benchmark's lookup report (cold and warm cache) and `docs/ARCHITECTURE.md`.
 - **4.3 Profile: stats and navigation** (§14.6, §14.1): done (2026-10-10). The page, its stats and travel stats, the country and continent tables, the sidebar's profile item, the phone avatar button on the Overworld and My Visits (the avatar menu is gone), and the Account section's Log out.
 - **4.4 Profile: account actions** (§14.6): done (2026-10-10). Change password, export data, delete account (Log out came with 4.3). Confirmed on the live database that `google_call_log.user_id` and `import_log.user_id` become null when a user is deleted, so no migration was needed.
-- **4.5 Passport secret** (§15.1).
+- **4.5 Passport secret** (§15.1): done (2026-10-11).
 - **Done when:**
   - A trip's photos import as visits on phone and desktop, with no photo data leaving the device (checked in the network log, as in Phase 2) and no duplicates on re-import ("Already logged") or on a retried save (idempotency).
   - The page stays responsive while 500 photos are read: no app-owned main-thread task over 100 ms while reading photos, in a performance trace. (The browser's own file-list work at the pick and the one-time review open were measured and accepted, `DECISIONS.md` 2026-10-06.)

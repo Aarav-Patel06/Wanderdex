@@ -4,7 +4,7 @@ import { useState } from "react";
 
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Logout } from "pixelarticons/react/Logout";
 import { Map as MapIcon } from "pixelarticons/react/Map";
 import { Notes } from "pixelarticons/react/Notes";
@@ -12,6 +12,7 @@ import { Plus } from "pixelarticons/react/Plus";
 
 import { AddVisitProvider, useAddVisitController } from "@/components/add/add-visit-context";
 import { PageBackground } from "@/components/page-background";
+import { usePassportSecret } from "@/components/passport/use-passport-secret";
 import { AvatarLink, UserInitial } from "@/components/shell/avatar";
 import { useTrackNavigation } from "@/components/shell/back-button";
 import { LogoutDialog } from "@/components/shell/logout-dialog";
@@ -32,6 +33,10 @@ const sidebarItem =
 // dialog.
 export function AppShell({ username, children }: { username: string; children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
+  // The logo is the passport secret's trigger (SPEC §15.1): a single click still goes to the
+  // Overworld, ~350 ms later, unless a second click follows.
+  const passport = usePassportSecret({ navigate: () => router.push("/") });
   const [logoutOpen, setLogoutOpen] = useState(false);
   const [spinning, setSpinning] = useState(false);
   const addVisit = useAddVisitController();
@@ -55,7 +60,7 @@ export function AppShell({ username, children }: { username: string; children: R
           <span aria-hidden="true" className="rpg-box-corner bottom-0 left-0" />
           <span aria-hidden="true" className="rpg-box-corner right-0 bottom-0" />
 
-          <Link href="/" className="logo flex items-center gap-3 self-start">
+          <Link href="/" className="logo flex items-center gap-3 self-start" {...passport.triggerProps}>
             <span className="logo-sprite">
               <Image
                 src="/sprites/passport.png"
@@ -64,6 +69,7 @@ export function AppShell({ username, children }: { username: string; children: R
                 height={64}
                 unoptimized
                 className="pixelated"
+                {...passport.spriteProps}
               />
               <span aria-hidden="true" className="sparkle" />
             </span>
@@ -200,6 +206,7 @@ export function AppShell({ username, children }: { username: string; children: R
       </nav>
 
       <LogoutDialog open={logoutOpen} onOpenChange={setLogoutOpen} />
+      {passport.overlay}
     </div>
   );
 }

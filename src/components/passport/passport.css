@@ -1,0 +1,222 @@
+/* The passport secret (SPEC §15.1). Palette tokens and the sprites' own colors only; every size
+   is a whole number of pixels.
+
+   --s is one sprite pixel: the passport is drawn at 6× on phones (a 300px spread, so it fits
+   375px with the side gutters) and 8× from md (400px). Its cover is 25 × 28 sprite pixels
+   (the rest of the 32 × 32 sprite is transparent), with the spine on its left, and each page
+   is the cover's size.
+
+   Timeline, all in steps: the shine crosses the closed cover (0.15s), then the cover turns on
+   its spine while the book slides to center the spread (0.6s), then the sparkles twinkle.
+   Each animation runs *from* the closed look to the element's own style, which is the open
+   look, so without motion (or with reduced motion) the spread is simply open. */
+
+.passport-dialog {
+  --s: 6px;
+  --sparkle: 2px;
+  --page-w: calc(25 * var(--s));
+  --page-h: calc(28 * var(--s));
+  --open-at: 0.6s;
+  --open-for: 0.6s;
+  position: fixed;
+  z-index: 50;
+  /* The close button's row, then the spread. */
+  width: calc(2 * var(--page-w));
+  height: calc(var(--page-h) + 4rem);
+  /* Centered, rounded to whole pixels so the sprites stay sharp (the first line is for
+     browsers without round()). */
+  left: calc(50% - var(--page-w));
+  left: round(down, calc(50% - var(--page-w)), 1px);
+  top: calc(50% - var(--page-h) / 2 - 2rem);
+  top: round(down, calc(50% - var(--page-h) / 2 - 2rem), 1px);
+  outline: none;
+  /* Only the book and the close button take clicks: anywhere else is outside, and closes it. */
+  pointer-events: none;
+}
+.passport-dialog button,
+.passport-book {
+  pointer-events: auto;
+}
+@media (min-width: 48rem) {
+  .passport-dialog {
+    --s: 8px;
+    --sparkle: 3px;
+  }
+}
+
+.passport {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: calc(2 * var(--page-w));
+  height: var(--page-h);
+  perspective: calc(150 * var(--s));
+}
+
+.passport-book {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  /* Closed, the book sits centered: half a page left of where the open spread sits. Five steps
+     of 15px (20px from md). */
+  animation: passport-center var(--open-for) steps(5, jump-start) var(--open-at) backwards;
+}
+@keyframes passport-center {
+  from {
+    translate: calc(var(--page-w) / -2) 0;
+  }
+}
+
+/* A cream page with a pixel border in text (3px, 4px from md). */
+.passport-sheet {
+  width: var(--page-w);
+  height: var(--page-h);
+  overflow: hidden;
+  border: calc(var(--s) / 2) solid var(--text);
+  background: var(--background);
+  color: var(--text);
+  padding: var(--s);
+}
+
+/* The right-hand page, a pixel behind the closed cover and hidden until the cover moves, so the
+   cover's transparent corner pixels never show it. */
+.passport-right {
+  position: absolute;
+  top: 0;
+  left: var(--page-w);
+  translate: 0 0 -1px;
+  animation: passport-reveal 0s var(--open-at) backwards;
+}
+@keyframes passport-reveal {
+  from {
+    visibility: hidden;
+  }
+}
+
+/* The cover, hinged on its left edge (the spine). Open, it has turned 180° onto the left half;
+   five steps of 36° on the way. jump-start: the first step comes with the right page's reveal,
+   so the page never shows through the closed cover's transparent corners. */
+.passport-cover {
+  position: absolute;
+  top: 0;
+  left: var(--page-w);
+  width: var(--page-w);
+  height: var(--page-h);
+  transform-origin: left center;
+  transform-style: preserve-3d;
+  transform: rotateY(-180deg);
+  animation: passport-flip var(--open-for) steps(5, jump-start) var(--open-at) backwards;
+}
+@keyframes passport-flip {
+  from {
+    transform: rotateY(0deg);
+  }
+}
+
+/* Its two sides: only the one facing the viewer shows. */
+.passport-face {
+  position: absolute;
+  inset: 0;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+/* The outside is the sprite, placed so its cover lines up with the face. */
+.passport-front img,
+.passport-shine {
+  position: absolute;
+  top: calc(-2 * var(--s));
+  left: calc(-4 * var(--s));
+  width: calc(32 * var(--s));
+  height: calc(32 * var(--s));
+  max-width: none;
+}
+/* The inside is the left-hand page, turned so it reads the right way round once open. */
+.passport-back {
+  transform: rotateY(180deg);
+}
+
+/* A flat shine band (like Add Visit's) crossing the closed cover in 8 steps of 4 sprite pixels,
+   masked to the sprite so it never shows past the cover's edge. */
+.passport-shine {
+  overflow: hidden;
+  -webkit-mask: url("/sprites/passport.png") 0 0 / 100% 100% no-repeat;
+  mask: url("/sprites/passport.png") 0 0 / 100% 100% no-repeat;
+}
+.passport-shine::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: calc(3 * var(--s));
+  background: color-mix(in srgb, var(--background) 45%, transparent);
+  translate: calc(32 * var(--s)) 0;
+  animation: passport-shine 0.4s steps(8) 0.15s backwards;
+}
+@keyframes passport-shine {
+  from {
+    translate: 0 0;
+  }
+}
+
+.passport-stats {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s);
+}
+
+/* The stamp sprite in the left page's corner, under the text (1×, 2× from md). */
+.passport-stamp {
+  position: absolute;
+  right: var(--s);
+  bottom: var(--s);
+  width: 66px;
+  height: 48px;
+}
+@media (min-width: 48rem) {
+  .passport-stamp {
+    width: 132px;
+    height: 96px;
+  }
+}
+
+/* Sparkle sprites around the spread, at (--x, --y) sprite pixels from its corner. Once the
+   spread is open each twinkles on and off in steps, on its own beat. */
+.passport-sparkle {
+  position: absolute;
+  left: calc(var(--x) * var(--s));
+  top: calc(var(--y) * var(--s));
+  pointer-events: none;
+  animation: passport-twinkle 1.2s steps(1) calc(var(--open-at) + var(--open-for) + var(--beat)) infinite backwards;
+}
+.passport-sparkle.sparkle_5 {
+  width: calc(5 * var(--sparkle));
+  height: calc(5 * var(--sparkle));
+}
+.passport-sparkle.sparkle_3 {
+  width: calc(3 * var(--sparkle));
+  height: calc(3 * var(--sparkle));
+}
+@keyframes passport-twinkle {
+  0% {
+    visibility: hidden;
+  }
+  25% {
+    visibility: visible;
+  }
+  75% {
+    visibility: hidden;
+  }
+}
+
+/* No turn, no slide, no shine, no twinkle: the third activation shows the open spread. */
+@media (prefers-reduced-motion: reduce) {
+  .passport-book,
+  .passport-right,
+  .passport-cover,
+  .passport-shine::before,
+  .passport-sparkle {
+    animation: none;
+  }
+}

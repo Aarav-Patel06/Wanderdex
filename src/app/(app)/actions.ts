@@ -4,12 +4,21 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 
 import { changePasswordSchema } from "@/lib/auth";
+import { loadStatsVisits } from "@/lib/stats/load";
+import { type PassportData, passportData } from "@/lib/stats/passport";
+import { profileStats } from "@/lib/stats/profile";
 import { createClient } from "@/lib/supabase/server";
 
 export async function logout() {
   const supabase = await createClient();
   await supabase.auth.signOut();
   redirect("/login");
+}
+
+// The passport secret's numbers (SPEC §15.1), for the sidebar's trigger: the profile's stats,
+// computed the same way under the user's session.
+export async function loadPassport(): Promise<PassportData> {
+  return passportData(profileStats(await loadStatsVisits()));
 }
 
 export interface PasswordFormState {
