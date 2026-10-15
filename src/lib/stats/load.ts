@@ -11,7 +11,7 @@ export async function loadStatsVisits() {
     supabase
       .from("visits")
       .select(
-        "id, place_id, category, visited_at, visited_precision, timezone, created_at, places!inner(name, city, country, country_code)",
+        "id, place_id, category, visited_at, visited_precision, timezone, created_at, rating, places!inner(name, city, country, country_code)",
       )
       // A stable order, so pages don't overlap.
       .order("id")

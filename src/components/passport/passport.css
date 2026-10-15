@@ -1,111 +1,227 @@
-/* The passport secret (SPEC §15.1). Palette tokens and the sprites' own colors only; every size
-   is a whole number of pixels.
+/* The passport secret (SPEC §15.1). Palette tokens and the sprites' own colors only (and two
+   dither masks, which only shape a token color), no gradients; every size is a whole number of
+   pixels.
 
-   --s is one sprite pixel: the passport is drawn at 6× on phones (a 300px spread, so it fits
-   375px with the side gutters) and 8× from md (400px). Its cover is 25 × 28 sprite pixels
-   (the rest of the 32 × 32 sprite is transparent), with the spine on its left, and each page
-   is the cover's size.
+   The cover is the passport sprite: its cover is 25 × 28 sprite pixels (the rest of the 32 × 32
+   sprite is transparent), with the spine on its left. Open, the book is two boards of the
+   cover's size, side by side, each an old red leather edge around an aged cream page; one page
+   at a time (phones, narrow or short windows), it's one board, and the data page turns over like
+   a leaf to show the travels page. A sprite pixel is --pw wide and --ph tall on screen, two whole
+   numbers: about 1.12 apart side by side, so each page is about 4:5 and the spread about 1.6:1;
+   about 1.27 apart one page at a time, where a phone's page needs the height. The book is at
+   most about 80% of the window's height.
+
+   Corners are small pixel staircases, never border-radius (the passport's exception to SPEC
+   §16.1's square corners): the polygons below, each for clip-path. A "-ring" one is the same
+   staircase's 2px outline (evenodd: the shape less itself 2px in), so a box can be outlined
+   without a fill. A staircase eroded by its outline is the same staircase again, so a fill
+   inset by the outline can reuse the shape.
 
    Timeline, all in steps: the shine crosses the closed cover (0.15s), then the cover turns on
    its spine while the book slides to center the spread (0.6s), then the sparkles twinkle.
    Each animation runs *from* the closed look to the element's own style, which is the open
-   look, so without motion (or with reduced motion) the spread is simply open. */
+   look, so without motion (or with reduced motion) the book is simply open. */
 
 .passport-dialog {
-  --s: 6px;
-  --sparkle: 2px;
-  --page-w: calc(25 * var(--s));
-  --page-h: calc(28 * var(--s));
+  /* Stepped round corners (see above), and each page's outline with its nicks. */
+  --px-sm: polygon(0 6px, 2px 6px, 2px 2px, 6px 2px, 6px 0, calc(100% - 6px) 0, calc(100% - 6px) 2px, calc(100% - 2px) 2px, calc(100% - 2px) 6px, 100% 6px, 100% calc(100% - 6px), calc(100% - 2px) calc(100% - 6px), calc(100% - 2px) calc(100% - 2px), calc(100% - 6px) calc(100% - 2px), calc(100% - 6px) 100%, 6px 100%, 6px calc(100% - 2px), 2px calc(100% - 2px), 2px calc(100% - 6px), 0 calc(100% - 6px));
+  --px-sm-ring: polygon(evenodd, 0 6px, 2px 6px, 2px 2px, 6px 2px, 6px 0, calc(100% - 6px) 0, calc(100% - 6px) 2px, calc(100% - 2px) 2px, calc(100% - 2px) 6px, 100% 6px, 100% calc(100% - 6px), calc(100% - 2px) calc(100% - 6px), calc(100% - 2px) calc(100% - 2px), calc(100% - 6px) calc(100% - 2px), calc(100% - 6px) 100%, 6px 100%, 6px calc(100% - 2px), 2px calc(100% - 2px), 2px calc(100% - 6px), 0 calc(100% - 6px), 0 6px, 2px 8px, 4px 8px, 4px 4px, 8px 4px, 8px 2px, calc(100% - 8px) 2px, calc(100% - 8px) 4px, calc(100% - 4px) 4px, calc(100% - 4px) 8px, calc(100% - 2px) 8px, calc(100% - 2px) calc(100% - 8px), calc(100% - 4px) calc(100% - 8px), calc(100% - 4px) calc(100% - 4px), calc(100% - 8px) calc(100% - 4px), calc(100% - 8px) calc(100% - 2px), 8px calc(100% - 2px), 8px calc(100% - 4px), 4px calc(100% - 4px), 4px calc(100% - 8px), 2px calc(100% - 8px), 2px 8px);
+  --px-lg: polygon(0 12px, 4px 12px, 4px 4px, 12px 4px, 12px 0, calc(100% - 12px) 0, calc(100% - 12px) 4px, calc(100% - 4px) 4px, calc(100% - 4px) 12px, 100% 12px, 100% calc(100% - 12px), calc(100% - 4px) calc(100% - 12px), calc(100% - 4px) calc(100% - 4px), calc(100% - 12px) calc(100% - 4px), calc(100% - 12px) 100%, 12px 100%, 12px calc(100% - 4px), 4px calc(100% - 4px), 4px calc(100% - 12px), 0 calc(100% - 12px));
+  --px-lg-right: polygon(0 0, calc(100% - 12px) 0, calc(100% - 12px) 4px, calc(100% - 4px) 4px, calc(100% - 4px) 12px, 100% 12px, 100% calc(100% - 12px), calc(100% - 4px) calc(100% - 12px), calc(100% - 4px) calc(100% - 4px), calc(100% - 12px) calc(100% - 4px), calc(100% - 12px) 100%, 0 100%);
+  --px-oval: polygon(0 12px, 2px 12px, 2px 8px, 4px 8px, 4px 6px, 6px 6px, 6px 4px, 8px 4px, 8px 2px, 12px 2px, 12px 0, calc(100% - 12px) 0, calc(100% - 12px) 2px, calc(100% - 8px) 2px, calc(100% - 8px) 4px, calc(100% - 6px) 4px, calc(100% - 6px) 6px, calc(100% - 4px) 6px, calc(100% - 4px) 8px, calc(100% - 2px) 8px, calc(100% - 2px) 12px, 100% 12px, 100% calc(100% - 12px), calc(100% - 2px) calc(100% - 12px), calc(100% - 2px) calc(100% - 8px), calc(100% - 4px) calc(100% - 8px), calc(100% - 4px) calc(100% - 6px), calc(100% - 6px) calc(100% - 6px), calc(100% - 6px) calc(100% - 4px), calc(100% - 8px) calc(100% - 4px), calc(100% - 8px) calc(100% - 2px), calc(100% - 12px) calc(100% - 2px), calc(100% - 12px) 100%, 12px 100%, 12px calc(100% - 2px), 8px calc(100% - 2px), 8px calc(100% - 4px), 6px calc(100% - 4px), 6px calc(100% - 6px), 4px calc(100% - 6px), 4px calc(100% - 8px), 2px calc(100% - 8px), 2px calc(100% - 12px), 0 calc(100% - 12px));
+  --px-oct: polygon(0 10px, 2px 10px, 2px 8px, 4px 8px, 4px 6px, 6px 6px, 6px 4px, 8px 4px, 8px 2px, 10px 2px, 10px 0, calc(100% - 10px) 0, calc(100% - 10px) 2px, calc(100% - 8px) 2px, calc(100% - 8px) 4px, calc(100% - 6px) 4px, calc(100% - 6px) 6px, calc(100% - 4px) 6px, calc(100% - 4px) 8px, calc(100% - 2px) 8px, calc(100% - 2px) 10px, 100% 10px, 100% calc(100% - 10px), calc(100% - 2px) calc(100% - 10px), calc(100% - 2px) calc(100% - 8px), calc(100% - 4px) calc(100% - 8px), calc(100% - 4px) calc(100% - 6px), calc(100% - 6px) calc(100% - 6px), calc(100% - 6px) calc(100% - 4px), calc(100% - 8px) calc(100% - 4px), calc(100% - 8px) calc(100% - 2px), calc(100% - 10px) calc(100% - 2px), calc(100% - 10px) 100%, 10px 100%, 10px calc(100% - 2px), 8px calc(100% - 2px), 8px calc(100% - 4px), 6px calc(100% - 4px), 6px calc(100% - 6px), 4px calc(100% - 6px), 4px calc(100% - 8px), 2px calc(100% - 8px), 2px calc(100% - 10px), 0 calc(100% - 10px));
+  --px-oval-ring: polygon(evenodd, 0 12px, 2px 12px, 2px 8px, 4px 8px, 4px 6px, 6px 6px, 6px 4px, 8px 4px, 8px 2px, 12px 2px, 12px 0, calc(100% - 12px) 0, calc(100% - 12px) 2px, calc(100% - 8px) 2px, calc(100% - 8px) 4px, calc(100% - 6px) 4px, calc(100% - 6px) 6px, calc(100% - 4px) 6px, calc(100% - 4px) 8px, calc(100% - 2px) 8px, calc(100% - 2px) 12px, 100% 12px, 100% calc(100% - 12px), calc(100% - 2px) calc(100% - 12px), calc(100% - 2px) calc(100% - 8px), calc(100% - 4px) calc(100% - 8px), calc(100% - 4px) calc(100% - 6px), calc(100% - 6px) calc(100% - 6px), calc(100% - 6px) calc(100% - 4px), calc(100% - 8px) calc(100% - 4px), calc(100% - 8px) calc(100% - 2px), calc(100% - 12px) calc(100% - 2px), calc(100% - 12px) 100%, 12px 100%, 12px calc(100% - 2px), 8px calc(100% - 2px), 8px calc(100% - 4px), 6px calc(100% - 4px), 6px calc(100% - 6px), 4px calc(100% - 6px), 4px calc(100% - 8px), 2px calc(100% - 8px), 2px calc(100% - 12px), 0 calc(100% - 12px), 0 12px, 2px 14px, 4px 14px, 4px 10px, 6px 10px, 6px 8px, 8px 8px, 8px 6px, 10px 6px, 10px 4px, 14px 4px, 14px 2px, calc(100% - 14px) 2px, calc(100% - 14px) 4px, calc(100% - 10px) 4px, calc(100% - 10px) 6px, calc(100% - 8px) 6px, calc(100% - 8px) 8px, calc(100% - 6px) 8px, calc(100% - 6px) 10px, calc(100% - 4px) 10px, calc(100% - 4px) 14px, calc(100% - 2px) 14px, calc(100% - 2px) calc(100% - 14px), calc(100% - 4px) calc(100% - 14px), calc(100% - 4px) calc(100% - 10px), calc(100% - 6px) calc(100% - 10px), calc(100% - 6px) calc(100% - 8px), calc(100% - 8px) calc(100% - 8px), calc(100% - 8px) calc(100% - 6px), calc(100% - 10px) calc(100% - 6px), calc(100% - 10px) calc(100% - 4px), calc(100% - 14px) calc(100% - 4px), calc(100% - 14px) calc(100% - 2px), 14px calc(100% - 2px), 14px calc(100% - 4px), 10px calc(100% - 4px), 10px calc(100% - 6px), 8px calc(100% - 6px), 8px calc(100% - 8px), 6px calc(100% - 8px), 6px calc(100% - 10px), 4px calc(100% - 10px), 4px calc(100% - 14px), 2px calc(100% - 14px), 2px 14px);
+  --px-oct-ring: polygon(evenodd, 0 10px, 2px 10px, 2px 8px, 4px 8px, 4px 6px, 6px 6px, 6px 4px, 8px 4px, 8px 2px, 10px 2px, 10px 0, calc(100% - 10px) 0, calc(100% - 10px) 2px, calc(100% - 8px) 2px, calc(100% - 8px) 4px, calc(100% - 6px) 4px, calc(100% - 6px) 6px, calc(100% - 4px) 6px, calc(100% - 4px) 8px, calc(100% - 2px) 8px, calc(100% - 2px) 10px, 100% 10px, 100% calc(100% - 10px), calc(100% - 2px) calc(100% - 10px), calc(100% - 2px) calc(100% - 8px), calc(100% - 4px) calc(100% - 8px), calc(100% - 4px) calc(100% - 6px), calc(100% - 6px) calc(100% - 6px), calc(100% - 6px) calc(100% - 4px), calc(100% - 8px) calc(100% - 4px), calc(100% - 8px) calc(100% - 2px), calc(100% - 10px) calc(100% - 2px), calc(100% - 10px) 100%, 10px 100%, 10px calc(100% - 2px), 8px calc(100% - 2px), 8px calc(100% - 4px), 6px calc(100% - 4px), 6px calc(100% - 6px), 4px calc(100% - 6px), 4px calc(100% - 8px), 2px calc(100% - 8px), 2px calc(100% - 10px), 0 calc(100% - 10px), 0 10px, 2px 12px, 4px 12px, 4px 10px, 6px 10px, 6px 8px, 8px 8px, 8px 6px, 10px 6px, 10px 4px, 12px 4px, 12px 2px, calc(100% - 12px) 2px, calc(100% - 12px) 4px, calc(100% - 10px) 4px, calc(100% - 10px) 6px, calc(100% - 8px) 6px, calc(100% - 8px) 8px, calc(100% - 6px) 8px, calc(100% - 6px) 10px, calc(100% - 4px) 10px, calc(100% - 4px) 12px, calc(100% - 2px) 12px, calc(100% - 2px) calc(100% - 12px), calc(100% - 4px) calc(100% - 12px), calc(100% - 4px) calc(100% - 10px), calc(100% - 6px) calc(100% - 10px), calc(100% - 6px) calc(100% - 8px), calc(100% - 8px) calc(100% - 8px), calc(100% - 8px) calc(100% - 6px), calc(100% - 10px) calc(100% - 6px), calc(100% - 10px) calc(100% - 4px), calc(100% - 12px) calc(100% - 4px), calc(100% - 12px) calc(100% - 2px), 12px calc(100% - 2px), 12px calc(100% - 4px), 10px calc(100% - 4px), 10px calc(100% - 6px), 8px calc(100% - 6px), 8px calc(100% - 8px), 6px calc(100% - 8px), 6px calc(100% - 10px), 4px calc(100% - 10px), 4px calc(100% - 12px), 2px calc(100% - 12px), 2px 12px);
+  --page-second: polygon(0 6px, 2px 6px, 2px 2px, 6px 2px, 6px 0, calc(100% - 180px) 0, calc(100% - 180px) 1px, calc(100% - 96px) 1px, calc(100% - 96px) 0, calc(100% - 6px) 0, calc(100% - 6px) 2px, calc(100% - 2px) 2px, calc(100% - 2px) 6px, 100% 6px, 100% 140px, calc(100% - 2px) 140px, calc(100% - 2px) 232px, 100% 232px, 100% calc(100% - 6px), calc(100% - 2px) calc(100% - 6px), calc(100% - 2px) calc(100% - 2px), calc(100% - 6px) calc(100% - 2px), calc(100% - 6px) 100%, 124px 100%, 124px calc(100% - 1px), 40px calc(100% - 1px), 40px 100%, 6px 100%, 6px calc(100% - 2px), 2px calc(100% - 2px), 2px calc(100% - 6px), 0 calc(100% - 6px));
+  --page-first: polygon(0 6px, 2px 6px, 2px 2px, 6px 2px, 6px 0, 88px 0, 88px 1px, 172px 1px, 172px 0, calc(100% - 6px) 0, calc(100% - 6px) 2px, calc(100% - 2px) 2px, calc(100% - 2px) 6px, 100% 6px, 100% calc(100% - 6px), calc(100% - 2px) calc(100% - 6px), calc(100% - 2px) calc(100% - 2px), calc(100% - 6px) calc(100% - 2px), calc(100% - 6px) 100%, calc(100% - 64px) 100%, calc(100% - 64px) calc(100% - 1px), calc(100% - 150px) calc(100% - 1px), calc(100% - 150px) 100%, 6px 100%, 6px calc(100% - 2px), 2px calc(100% - 2px), 2px calc(100% - 6px), 0 calc(100% - 6px), 0 calc(100% - 132px), 2px calc(100% - 132px), 2px calc(100% - 236px), 0 calc(100% - 236px));
+  /* Two dither masks (alpha only, 2px dither pixels): sparse (6%) and dense (37.5%). */
+  --dither-sparse: url("/sprites/passport/dither-sparse.png") 0 0 / 64px 64px repeat;
+  --dither-dense: url("/sprites/passport/dither-dense.png") 0 0 / 32px 32px repeat;
+  /* Old leather: deeper than primary, its shade deeper still (no token sits between primary and
+     text). */
+  --leather: color-mix(in srgb, var(--primary) 78%, var(--text));
+  --leather-shade: color-mix(in srgb, var(--primary) 50%, var(--text));
+  /* Side by side, the close button hangs over the book's top-right corner (its 52px less the
+     20px over the book); one page at a time it has its own row (44px, its 4px pixel border on
+     each side, and 8px to the book). Then the page arrows' row, one page at a time. */
+  --row: 32px;
+  --turn-row: 0px;
+  /* Side by side. Without round() (old browsers), a fixed size. */
+  --gutter: 16px;
+  --pw: 20px;
+  --ph: 22px;
+  --half-w: calc(25 * var(--pw));
+  --half-h: calc(28 * var(--ph));
+  --book-w: calc(2 * var(--half-w));
+  --book-h: var(--half-h);
+  /* A board: the leather edge on the outer sides (its 4px outline included), the page edges
+     stacked beside the page, the spine, and the pixel the page sits off the spine. */
+  --edge: 16px;
+  --stack: 8px;
+  --spine: 6px;
+  --page-w: calc(var(--half-w) - var(--edge) - var(--stack) - var(--spine) - 1px);
+  --page-h: calc(var(--half-h) - 2 * var(--edge));
+  /* Spacing, all from the inner double border: the border (--bw wide) sits --b in from the
+     page's edges, --bt from its top (room for the ribbon across it); everything else keeps at
+     least --gap inside it, and --gap is also the space between sections (16px here, 8px one
+     page at a time). --inset is the content's distance from the sides and bottom. */
+  --bw: 6px;
+  --b: 12px;
+  --bt: 20px;
+  --gap: 16px;
+  --inset: calc(var(--b) + var(--bw) + var(--gap));
+  /* The text column: the machine-readable zone's 44 VT323 characters (0.4em each) span it
+     exactly, at the largest whole size up to 20px that fits inside the strip's padding
+     (--strip-pad), and the side margin --m is what's left. */
+  --strip-pad: 16px;
+  --mrz: 20px;
+  --m: 58px;
+  /* Room below the travels rows: the footer (with the compass, side by side). */
+  --footer: 60px;
+  --sparkle: 3px;
+  /* Closed, the book sits centered: half a board back, in five whole-pixel steps. */
+  --slide: calc(var(--half-w) / 2);
   --open-at: 0.6s;
   --open-for: 0.6s;
   position: fixed;
   z-index: 50;
-  /* The close button's row, then the spread. */
-  width: calc(2 * var(--page-w));
-  height: calc(var(--page-h) + 4rem);
-  /* Centered, rounded to whole pixels so the sprites stay sharp (the first line is for
-     browsers without round()). */
-  left: calc(50% - var(--page-w));
-  left: round(down, calc(50% - var(--page-w)), 1px);
-  top: calc(50% - var(--page-h) / 2 - 2rem);
-  top: round(down, calc(50% - var(--page-h) / 2 - 2rem), 1px);
+  inset: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
   outline: none;
-  /* Only the book and the close button take clicks: anywhere else is outside, and closes it. */
-  pointer-events: none;
 }
-.passport-dialog button,
-.passport-book {
-  pointer-events: auto;
+.passport-dialog[data-layout="single"] {
+  --row: 60px;
+  --turn-row: 60px;
+  /* The page must hold the 16px machine-readable zone inside its border: a 350px board, so
+     a 360px phone keeps only 5px a side. */
+  --gutter: 5px;
+  --pw: 14px;
+  --ph: 18px;
+  --book-w: var(--half-w);
+  --edge: 10px;
+  --stack: 6px;
+  --spine: 6px;
+  --b: 4px;
+  --bt: 15px;
+  --gap: 8px;
+  --strip-pad: 4px;
+  --mrz: 16px;
+  --m: 22px;
+  --footer: 18px;
+  --sparkle: 2px;
+  --slide: 0px;
 }
-@media (min-width: 48rem) {
+@supports (width: round(down, 1px, 1px)) {
   .passport-dialog {
-    --s: 8px;
-    --sparkle: 3px;
+    --ph: clamp(18px, round(down, min(80dvh / 28, 90vw * 1.12 / 50), 1px), 28px);
+    --pw: round(nearest, var(--ph) / 1.12, 1px);
+    --mrz: clamp(16px, round(down, (var(--page-w) - 2 * var(--inset) - 2 * var(--strip-pad)) / 17.6, 1px), 20px);
+    --m: max(var(--inset) + var(--strip-pad), round(down, (var(--page-w) - 17.6 * var(--mrz)) / 2, 1px));
+    --sparkle: clamp(2px, round(down, var(--ph) / 6, 1px), 4px);
+    --slide: round(nearest, var(--half-w) / 2, 5px);
   }
+  .passport-dialog[data-layout="single"] {
+    --pw: clamp(14px, round(down, min((100vw - 24px) / 25, 80dvh / 28 / 1.27), 1px), 16px);
+    --ph: round(nearest, var(--pw) * 1.27, 1px);
+    --mrz: clamp(16px, round(down, (var(--page-w) - 2 * var(--inset) - 2 * var(--strip-pad)) / 17.6, 1px), 20px);
+    --m: max(var(--inset) + var(--strip-pad), round(down, (var(--page-w) - 17.6 * var(--mrz)) / 2, 1px));
+    --sparkle: 2px;
+    --slide: 0px;
+  }
+}
+
+/* The close button's row, the book, and the arrows, centered at whole pixels, never closer than
+   the gutter to the window's edge. */
+.passport-stage {
+  --stage-h: calc(var(--row) + var(--book-h) + var(--turn-row));
+  position: absolute;
+  box-sizing: content-box;
+  width: var(--book-w);
+  height: var(--stage-h);
+  padding-bottom: var(--gutter);
+  left: max(var(--gutter), calc(50% - var(--book-w) / 2));
+  left: max(var(--gutter), round(down, 50% - var(--book-w) / 2, 1px));
+  top: max(var(--gutter), calc(50% - var(--stage-h) / 2));
+  top: max(var(--gutter), round(down, 50% - var(--stage-h) / 2, 1px));
+}
+.passport-close {
+  position: absolute;
+  z-index: 1;
+  top: 4px;
+  right: -10px;
+}
+[data-layout="single"] .passport-close {
+  right: 4px;
 }
 
 .passport {
   position: absolute;
-  bottom: 0;
+  top: var(--row);
   left: 0;
-  width: calc(2 * var(--page-w));
-  height: var(--page-h);
-  perspective: calc(150 * var(--s));
+  width: var(--book-w);
+  height: var(--book-h);
+  perspective: calc(150 * var(--pw));
+  /* Laid down by hand: the whole book turned 1.5° (the owner's choice; everything in it is
+     resampled, so its pixels soften a little). */
+  rotate: -1.5deg;
 }
 
 .passport-book {
   position: absolute;
   inset: 0;
   transform-style: preserve-3d;
-  /* Closed, the book sits centered: half a page left of where the open spread sits. Five steps
-     of 15px (20px from md). */
   animation: passport-center var(--open-for) steps(5, jump-start) var(--open-at) backwards;
 }
 @keyframes passport-center {
   from {
-    translate: calc(var(--page-w) / -2) 0;
+    translate: calc(-1 * var(--slide)) 0;
   }
 }
 
-/* A cream page with a pixel border in text (3px, 4px from md). */
-.passport-sheet {
-  width: var(--page-w);
-  height: var(--page-h);
-  overflow: hidden;
-  border: calc(var(--s) / 2) solid var(--text);
-  background: var(--background);
-  color: var(--text);
-  padding: var(--s);
+/* The back board (the right one, or the only one), hidden until the cover moves and a pixel
+   behind it while it turns, so the cover's transparent corner pixels never show it. Once open
+   it's back in the page's plane, so perspective doesn't shrink it off whole pixels. */
+.passport-back {
+  left: var(--half-w);
+  /* For the leaf, one page at a time. */
+  perspective: calc(150 * var(--pw));
+  animation:
+    passport-reveal 0s var(--open-at) backwards,
+    passport-behind var(--open-for) var(--open-at) backwards;
 }
-
-/* The right-hand page, a pixel behind the closed cover and hidden until the cover moves, so the
-   cover's transparent corner pixels never show it. */
-.passport-right {
-  position: absolute;
-  top: 0;
-  left: var(--page-w);
-  translate: 0 0 -1px;
-  animation: passport-reveal 0s var(--open-at) backwards;
+[data-layout="single"] .passport-back {
+  left: 0;
 }
 @keyframes passport-reveal {
   from {
     visibility: hidden;
   }
 }
+@keyframes passport-behind {
+  from,
+  to {
+    translate: 0 0 -1px;
+  }
+}
 
-/* The cover, hinged on its left edge (the spine). Open, it has turned 180° onto the left half;
-   five steps of 36° on the way. jump-start: the first step comes with the right page's reveal,
-   so the page never shows through the closed cover's transparent corners. */
+/* The cover, hinged on its spine. Open, it has turned 180°: side by side onto the front board's
+   place, its inside showing; one page at a time, out of sight (its inside is empty). Five steps
+   of 36° on the way. jump-start: the first step comes with the back board's reveal, so the
+   board never shows through the closed cover's transparent corners. */
 .passport-cover {
   position: absolute;
   top: 0;
-  left: var(--page-w);
-  width: var(--page-w);
-  height: var(--page-h);
+  left: var(--half-w);
+  width: var(--half-w);
+  height: var(--half-h);
   transform-origin: left center;
   transform-style: preserve-3d;
   transform: rotateY(-180deg);
   animation: passport-flip var(--open-for) steps(5, jump-start) var(--open-at) backwards;
+}
+[data-layout="single"] .passport-cover {
+  left: 0;
 }
 @keyframes passport-flip {
   from {
@@ -121,17 +237,23 @@
   backface-visibility: hidden;
 }
 /* The outside is the sprite, placed so its cover lines up with the face. */
-.passport-front img,
+.passport-art {
+  position: absolute;
+  top: calc(-2 * var(--ph));
+  left: calc(-4 * var(--pw));
+  width: calc(32 * var(--pw));
+  height: calc(32 * var(--ph));
+}
+.passport-art img,
 .passport-shine {
   position: absolute;
-  top: calc(-2 * var(--s));
-  left: calc(-4 * var(--s));
-  width: calc(32 * var(--s));
-  height: calc(32 * var(--s));
+  inset: 0;
+  width: 100%;
+  height: 100%;
   max-width: none;
 }
-/* The inside is the left-hand page, turned so it reads the right way round once open. */
-.passport-back {
+/* The inside is the front board, turned so it reads the right way round once open. */
+.passport-inside {
   transform: rotateY(180deg);
 }
 
@@ -148,9 +270,9 @@
   top: 0;
   bottom: 0;
   left: 0;
-  width: calc(3 * var(--s));
+  width: calc(3 * var(--pw));
   background: color-mix(in srgb, var(--background) 45%, transparent);
-  translate: calc(32 * var(--s)) 0;
+  translate: calc(32 * var(--pw)) 0;
   animation: passport-shine 0.4s steps(8) 0.15s backwards;
 }
 @keyframes passport-shine {
@@ -159,34 +281,1101 @@
   }
 }
 
-.passport-stats {
+/* Dither masks: crisp at every scale. */
+.passport-scuffs::before,
+.passport-scuffs::after,
+.passport-wear::before,
+.passport-wear::after,
+.passport-wear-edge,
+.passport-fox,
+.passport-band::before,
+.passport-map,
+.passport-trail {
+  image-rendering: pixelated;
+}
+
+/* ---- The boards ----------------------------------------------------------------------------
+
+   Old red leather with a 4px outline in text, stepped round corners on the outer side, a
+   highlight along the top and a shade along the bottom, scuffs (scattered lighter and darker
+   pixels), and the spine (the shade, with the outline's line down its middle) on the inner
+   side. The spine side is square: it meets the other board. */
+
+.passport-board {
+  position: absolute;
+  top: 0;
+  width: var(--half-w);
+  height: var(--half-h);
+}
+.passport-leather {
+  position: absolute;
+  inset: 0;
+  background: var(--text);
+  clip-path: var(--px-lg-right);
+}
+.passport-leather::before,
+.passport-leather::after {
+  content: "";
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+}
+.passport-leather::before {
+  left: 2px;
+  right: 4px;
+  background: var(--leather);
+  box-shadow:
+    inset 0 2px 0 var(--primary),
+    inset 0 -4px 0 var(--leather-shade);
+  clip-path: var(--px-lg-right);
+}
+.passport-leather::after {
+  left: 2px;
+  width: calc(var(--spine) - 2px);
+  background: var(--leather-shade);
+}
+/* One page at a time, the board's spine is the book's left edge: an outline and round corners
+   there too. */
+[data-layout="single"] .passport-leather,
+[data-layout="single"] .passport-leather::before {
+  clip-path: var(--px-lg);
+}
+[data-layout="single"] .passport-leather::before,
+[data-layout="single"] .passport-leather::after {
+  left: 4px;
+}
+[data-layout="single"] .passport-leather::after {
+  top: 12px;
+  bottom: 12px;
+  width: calc(var(--spine) - 4px);
+}
+/* The front board is the mirror image: rounded on the left, the spine on the right. */
+.passport-inside .passport-leather {
+  scale: -1 1;
+}
+.passport-scuffs {
+  position: absolute;
+  inset: 6px 6px 8px var(--spine);
+}
+.passport-scuffs::before,
+.passport-scuffs::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+.passport-scuffs::before {
+  background: var(--primary);
+  -webkit-mask: var(--dither-sparse);
+  mask: var(--dither-sparse);
+}
+.passport-scuffs::after {
+  background: var(--leather-shade);
+  -webkit-mask: var(--dither-sparse);
+  mask: var(--dither-sparse);
+  -webkit-mask-position: 22px 38px;
+  mask-position: 22px 38px;
+}
+
+/* ---- The pages -----------------------------------------------------------------------------
+
+   An aged cream sheet in its board, a pixel or two off square, with stepped round corners and a
+   few one- or two-pixel nicks along its edges; three page edges stacked unevenly on its outer
+   side. Each is a size container, so its layout follows the page's size, not the window's:
+   compact by default, roomier from 380px wide. */
+
+.passport-sheet {
+  position: absolute;
+  top: calc(var(--edge) + 1px);
+  left: calc(var(--spine) + 1px);
+  width: var(--page-w);
+  height: var(--page-h);
+  overflow: hidden;
+  isolation: isolate;
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--font-vt323);
+  clip-path: var(--page-second);
+  container: page / size;
+}
+.passport-inside .passport-first {
+  top: calc(var(--edge) - 1px);
+  left: auto;
+  right: calc(var(--spine) + 1px);
+}
+.passport-first {
+  clip-path: var(--page-first);
+}
+
+/* The stacked page edges: three sheets behind the page, each sticking out a little further and
+   none quite level (the left page's are mirrored). */
+.passport-edges {
+  position: absolute;
+  top: calc(var(--edge) + 1px);
+  left: calc(var(--spine) + 1px);
+  width: var(--page-w);
+  height: var(--page-h);
+}
+.passport-inside .passport-edges {
+  top: calc(var(--edge) - 1px);
+  left: auto;
+  right: calc(var(--spine) + 1px);
+  scale: -1 1;
+}
+.passport-edges span {
+  position: absolute;
+  inset: 0;
+  clip-path: var(--px-sm);
+}
+.passport-edges span:nth-child(1) {
+  inset: 3px calc(-1 * var(--stack)) -1px var(--stack);
+  background: var(--surface-dark);
+}
+.passport-edges span:nth-child(2) {
+  inset: -1px calc(3px - var(--stack)) 2px calc(var(--stack) - 3px);
+  background: var(--surface);
+}
+.passport-edges span:nth-child(3) {
+  inset: 1px -2px 0 2px;
+  background: var(--surface-dark);
+}
+
+/* One page at a time, the data page is a leaf over the travels page, hinged on the spine, a
+   pixel up and in from it: the arrows turn it over in five steps (its back is out of sight). */
+[data-layout="single"] .passport-first {
+  top: var(--edge);
+  left: var(--spine);
+  transform-origin: left center;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  transition: transform 0.5s steps(5, jump-start);
+}
+[data-layout="single"][data-page="2"] .passport-first {
+  transform: rotateY(-180deg);
+}
+
+/* The page's wear: a dithered texture all over (sparse), darker dithered edges, thicker at the
+   corners (dense, then sparse in text at the very edge), and a few foxing spots. */
+.passport-wear {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.passport-wear::before,
+.passport-wear::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+.passport-wear::before {
+  background: var(--surface-dark);
+  -webkit-mask: var(--dither-sparse);
+  mask: var(--dither-sparse);
+}
+.passport-wear::after,
+.passport-wear-edge {
+  --w: 10px;
+  --c: 24px;
+  background: var(--surface-dark);
+  -webkit-mask: var(--dither-dense);
+  mask: var(--dither-dense);
+  /* The page less a hole that keeps --w from the edges and --c from the corners. */
+  clip-path: polygon(
+    evenodd,
+    0 0,
+    100% 0,
+    100% 100%,
+    0 100%,
+    0 0,
+    var(--c) var(--w),
+    calc(100% - var(--c)) var(--w),
+    calc(100% - var(--c)) var(--c),
+    calc(100% - var(--w)) var(--c),
+    calc(100% - var(--w)) calc(100% - var(--c)),
+    calc(100% - var(--c)) calc(100% - var(--c)),
+    calc(100% - var(--c)) calc(100% - var(--w)),
+    var(--c) calc(100% - var(--w)),
+    var(--c) calc(100% - var(--c)),
+    var(--w) calc(100% - var(--c)),
+    var(--w) var(--c),
+    var(--c) var(--c),
+    var(--c) var(--w)
+  );
+}
+.passport-wear-edge {
+  --w: 4px;
+  --c: 12px;
+  position: absolute;
+  inset: 0;
+  background: var(--map-border);
+  -webkit-mask: var(--dither-sparse);
+  mask: var(--dither-sparse);
+}
+/* Foxing sits in the gap between the double border and the content, centered in it, --at of the
+   way along its side. */
+.passport-fox {
+  --s: min(var(--size), var(--gap) - 2px);
+  --top: calc(var(--bt) + var(--bw) + var(--gap));
+  --bottom: calc(var(--b) + var(--bw) + var(--gap));
+  position: absolute;
+  width: var(--s);
+  height: var(--s);
+  background: var(--accent);
+  -webkit-mask: var(--dither-dense);
+  mask: var(--dither-dense);
+  clip-path: var(--px-sm);
+}
+.passport-fox[data-side="top"],
+.passport-fox[data-side="bottom"] {
+  left: calc(var(--m) + var(--at) * (100% - 2 * var(--m) - var(--s)));
+  left: round(down, var(--m) + var(--at) * (100% - 2 * var(--m) - var(--s)), 2px);
+}
+.passport-fox[data-side="left"],
+.passport-fox[data-side="right"] {
+  top: calc(var(--top) + var(--at) * (100% - var(--top) - var(--bottom) - var(--s)));
+  top: round(down, var(--top) + var(--at) * (100% - var(--top) - var(--bottom) - var(--s)), 2px);
+}
+.passport-fox[data-side="top"] {
+  top: calc(var(--bt) + var(--bw) + (var(--gap) - var(--s)) / 2);
+}
+.passport-fox[data-side="bottom"] {
+  bottom: calc(var(--b) + var(--bw) + (var(--gap) - var(--s)) / 2);
+}
+.passport-fox[data-side="left"] {
+  left: calc(var(--b) + var(--bw) + (var(--gap) - var(--s)) / 2);
+}
+.passport-fox[data-side="right"] {
+  right: calc(var(--b) + var(--bw) + (var(--gap) - var(--s)) / 2);
+}
+
+/* The thin double border, with a diamond on each corner. */
+.passport-frame {
+  position: absolute;
+  inset: var(--bt) var(--b) var(--b);
+  border: var(--bw) double var(--map-border);
+  pointer-events: none;
+}
+/* On the travels page the top line stops at the ribbon's diamonds: a gap 266px wide (the
+   ribbon's 244 with its tails, 6px clear, and half a diamond each side) around the ribbon's
+   center, which is the text column's. */
+.passport-second .passport-frame {
+  --rc: calc(var(--m) + (var(--page-w) - 2 * var(--m)) / 2 - var(--b));
+  --rc: calc(var(--m) + round(down, (var(--page-w) - 2 * var(--m)) / 2, 1px) - var(--b));
+  clip-path: polygon(
+    evenodd,
+    -16px -16px,
+    calc(100% + 16px) -16px,
+    calc(100% + 16px) calc(100% + 16px),
+    -16px calc(100% + 16px),
+    -16px -16px,
+    calc(var(--rc) - 133px) -16px,
+    calc(var(--rc) + 133px) -16px,
+    calc(var(--rc) + 133px) var(--bw),
+    calc(var(--rc) - 133px) var(--bw),
+    calc(var(--rc) - 133px) -16px
+  );
+}
+.passport-frame .passport-corner {
+  position: absolute;
+  top: -8px;
+  left: -8px;
+}
+.passport-frame .passport-corner:nth-child(2) {
+  left: auto;
+  right: -8px;
+}
+.passport-frame .passport-corner:nth-child(3) {
+  top: auto;
+  bottom: -8px;
+}
+.passport-frame .passport-corner:nth-child(4) {
+  top: auto;
+  left: auto;
+  bottom: -8px;
+  right: -8px;
+}
+
+/* A 5 × 5 pixel diamond (2px pixels) in primary, its center pixel in accent. */
+.passport-diamond {
+  position: relative;
+  flex: none;
+  display: block;
+  width: 10px;
+  height: 10px;
+  background: var(--primary);
+  clip-path: polygon(
+    4px 0,
+    6px 0,
+    6px 2px,
+    8px 2px,
+    8px 4px,
+    10px 4px,
+    10px 6px,
+    8px 6px,
+    8px 8px,
+    6px 8px,
+    6px 10px,
+    4px 10px,
+    4px 8px,
+    2px 8px,
+    2px 6px,
+    0 6px,
+    0 4px,
+    2px 4px,
+    2px 2px,
+    4px 2px
+  );
+}
+.passport-diamond::after {
+  content: "";
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 2px;
+  height: 2px;
+  background: var(--accent);
+}
+
+.passport-content {
+  position: absolute;
+  inset: calc(var(--bt) + var(--bw) + var(--gap)) var(--m) var(--inset);
+  display: flex;
+  flex-direction: column;
+}
+.passport-loading {
+  margin: auto;
+}
+
+/* A framed panel: a 2px outline in text with stepped corners, and a second line inside it in
+   surface-dark, so it reads as set into the page. */
+.passport-panel {
+  position: relative;
+  isolation: isolate;
+}
+.passport-panel::before,
+.passport-panel::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background: var(--text);
+  clip-path: var(--px-sm-ring);
+}
+.passport-panel::after {
+  inset: 2px;
+  background: var(--surface-dark);
+}
+
+/* Type: VT323 labels in capitals, Press Start 2P headings and numbers, VT323 words (SPEC §16.4). */
+.passport-label {
+  font-size: var(--text-tiny);
+  line-height: 1;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+.passport-field {
+  margin-top: 4px;
+  font-family: var(--font-press-start);
+  font-size: var(--text-h3);
+  line-height: 1.25;
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
+}
+/* A name too long for Press Start 2P on this page (see the overlay). */
+.passport-field[data-fit="none"],
+.passport-field[data-fit="roomy"] {
+  font-family: var(--font-vt323);
+  font-size: var(--text-body);
+  line-height: 20px;
+}
+.passport-code {
+  margin-top: 2px;
+  font-size: var(--text-body);
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+/* ---- The data page ---- */
+
+/* The header band: a dithered tint with stepped corners behind the globe and the name. */
+.passport-band {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: var(--gap);
+  padding: 4px 8px;
+}
+.passport-band::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background: var(--surface-dark);
+  -webkit-mask: var(--dither-dense);
+  mask: var(--dither-dense);
+  clip-path: var(--px-sm);
+}
+.passport-globe {
+  flex: none;
+  width: 24px;
+  height: 24px;
+}
+.passport-brand {
+  font-family: var(--font-press-start);
+  font-size: var(--text-h2);
+  line-height: 1.25;
+}
+.passport-tagline {
+  font-size: var(--text-tiny);
+  line-height: 1;
+}
+.passport-error {
+  margin: auto 0;
+  font-size: var(--text-body);
+}
+
+/* The holder panel: the photo, then the passport's codes over the holder's fields. */
+.passport-holder {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px;
+}
+/* The photo: the initial on the map's ocean over a strip of land, in a lighter mat and a
+   frame, all with stepped corners. */
+.passport-photo {
+  position: relative;
+  flex: none;
+  padding: 8px;
+  background: var(--background);
+  clip-path: var(--px-sm);
+}
+.passport-photo::before,
+.passport-photo span::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--text);
+  clip-path: var(--px-sm-ring);
+}
+.passport-photo span {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 72px;
+  background: var(--map-ocean);
+  clip-path: var(--px-sm);
+  color: var(--background);
+  font-family: var(--font-press-start);
+  font-size: var(--text-h1);
+  line-height: 1;
+  text-shadow: 4px 4px 0 var(--text);
+}
+/* A stepped strip of land along the photo's bottom, behind the initial. */
+.passport-photo span::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 20px;
+  background: var(--map-land);
+  clip-path: polygon(0 8px, 12px 8px, 12px 4px, 28px 4px, 28px 0, 44px 0, 44px 8px, 100% 8px, 100% 100%, 0 100%);
+}
+.passport-holder-fields {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+/* Type, code, and number in one small row, ruled off from the fields. */
+.passport-codes {
+  display: flex;
+  gap: 8px;
+  padding-bottom: 6px;
+  border-bottom: 2px solid var(--surface-dark);
+}
+.passport-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Entry stamps: a labelled section over the security print (the world map, from page edge to
+   page edge, and the airplane trail across it, both faint: their sprites' shapes in
+   surface-dark, since the sprites' own cream all but matches the aged page). */
+.passport-entries {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  margin-top: var(--gap);
+}
+/* A section label, ruled to the end of the line. */
+.passport-section {
+  font-family: var(--font-vt323);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.passport-section::after {
+  content: "";
+  flex: 1;
+  height: 2px;
+  background: var(--surface-dark);
+}
+/* The print reaches out to the gap inside the border and no further, and keeps to its own
+   space: the map and trail never run under the label or the strip. */
+.passport-print {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  /* Never shorter than the stamps (compact: two 36px rows and their 8px gap, with jitter). */
+  min-height: 82px;
+  overflow: hidden;
+  margin: 6px calc(var(--inset) - var(--m)) 0;
+}
+.passport-print > span {
+  position: absolute;
+  --cx: calc(50% - var(--w) / 2);
+  --cy: calc(50% - var(--h) / 2);
+  width: var(--w);
+  height: var(--h);
+  left: calc(var(--cx) + var(--x));
+  left: round(down, var(--cx) + var(--x), 1px);
+  top: calc(var(--cy) + var(--y));
+  top: round(down, var(--cy) + var(--y), 1px);
+}
+.passport-map,
+.passport-trail {
+  background: var(--surface-dark);
+}
+.passport-map {
+  --w: 360px;
+  --h: 142px;
+  --x: 0px;
+  --y: 0px;
+  -webkit-mask: url("/sprites/bg/world_map.png") 0 0 / 100% 100% no-repeat;
+  mask: url("/sprites/bg/world_map.png") 0 0 / 100% 100% no-repeat;
+}
+.passport-trail {
+  --w: 104px;
+  --h: 46px;
+  --x: -64px;
+  --y: -6px;
+  -webkit-mask: url("/sprites/bg/airplane_trail.png") 0 0 / 100% 100% no-repeat;
+  mask: url("/sprites/bg/airplane_trail.png") 0 0 / 100% 100% no-repeat;
+}
+/* No stamps yet: just the line, no print under it. */
+.passport-print:has(.passport-entry-none) > span {
+  display: none;
+}
+.passport-entry-list,
+.passport-entry-none {
+  position: absolute;
+  inset: 0 calc(var(--m) - var(--inset));
+}
+/* The stamps, centered in their space like the map (the cluster is 82px tall, 108px roomy). */
+.passport-entry-list {
+  --cluster: 82px;
+  top: calc((100% - var(--cluster)) / 2);
+  top: round(down, (100% - var(--cluster)) / 2, 1px);
+  bottom: auto;
+  height: var(--cluster);
+}
+.passport-entry-none {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-body);
+  line-height: 1;
+  text-align: center;
+}
+
+/* A stamp: its country code in the ink, its date in text (small ink-colored text would fail
+   SPEC §16.3), in an inked outline of one of four shapes, on the paper (opaque, so the map
+   behind never shows under its text). Compact pages: a tidy 2 × 2 grid of wide stamps, the
+   code beside the date; roomy ones: two staggered rows of three, overlapping only at their
+   outlines (under 5% of a stamp). */
+.passport-entry {
+  --ink: var(--primary);
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 126px;
+  height: 36px;
+  background: var(--surface);
+  clip-path: var(--px-sm);
+}
+.passport-entry[data-shape="oct"] {
+  clip-path: var(--px-oct);
+}
+.passport-entry[data-shape="oval"] {
+  clip-path: var(--px-oval);
+}
+.passport-entry[data-ink="ocean"] {
+  --ink: var(--map-ocean);
+}
+.passport-entry[data-ink="border"] {
+  --ink: var(--map-border);
+}
+.passport-entry::before,
+.passport-entry::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--ink);
+  clip-path: var(--px-sm-ring);
+}
+.passport-entry::after {
+  display: none;
+}
+.passport-entry[data-shape="oct"]::before {
+  clip-path: var(--px-oct-ring);
+}
+.passport-entry[data-shape="oval"]::before {
+  clip-path: var(--px-oval-ring);
+}
+.passport-entry[data-shape="double"]::after {
+  display: block;
+  inset: 4px;
+}
+.passport-entry-code {
+  position: relative;
+  color: var(--ink);
+  font-family: var(--font-press-start);
+  font-size: var(--text-h3);
+  line-height: 1;
+}
+.passport-entry-date {
+  position: relative;
+  font-size: var(--text-tiny);
+  line-height: 1;
+}
+.passport-entry:nth-child(odd) {
+  left: 0;
+}
+.passport-entry:nth-child(even) {
+  right: 0;
+}
+.passport-entry:nth-child(1) {
+  top: 0;
+}
+.passport-entry:nth-child(2) {
+  top: 2px;
+}
+.passport-entry:nth-child(3) {
+  top: 46px;
+}
+.passport-entry:nth-child(4) {
+  top: 44px;
+}
+.passport-entry:nth-child(n + 5) {
+  display: none;
+}
+
+/* The machine-readable zone in a lighter strip, with stepped corners, reaching to just inside
+   the double border; its two lines of 44 characters span the text area. */
+.passport-mrz-strip {
+  position: relative;
+  isolation: isolate;
+  margin: var(--gap) calc(var(--inset) - var(--m)) 0;
+  padding: 4px calc(var(--m) - var(--inset));
+}
+.passport-mrz-strip::before,
+.passport-mrz-strip::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background: var(--background);
+  clip-path: var(--px-sm);
+}
+.passport-mrz-strip::after {
+  background: var(--surface-dark);
+  clip-path: var(--px-sm-ring);
+}
+.passport-mrz {
+  font-size: var(--mrz);
+  line-height: calc(var(--mrz) + 2px);
+  text-align: center;
+  white-space: pre;
+}
+
+/* ---- The travels page ---- */
+
+/* Faint (its shape in surface-dark), at the footer's end, clear of the panel; compact pages
+   have no room for it. */
+.passport-compass {
+  display: none;
+  flex: none;
+  margin-left: auto;
+  width: 60px;
+  height: 60px;
+  background: var(--surface-dark);
+  -webkit-mask: url("/sprites/bg/compass.png") 0 0 / 100% 100% no-repeat;
+  mask: url("/sprites/bg/compass.png") 0 0 / 100% 100% no-repeat;
+}
+
+/* The heading: the ribbon (out of flow) across the top border line, centered on it, between
+   the diamonds that cap the line; then the subtitle, the gap below the ribbon's tails (19px
+   is how far they reach below the content's top, less the gap). */
+.passport-heading {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: var(--s);
+  align-items: center;
+  padding-top: 19px;
+}
+.passport-ribbon-cap {
+  position: absolute;
+  top: calc(-8px - var(--gap));
+  left: calc(50% - 138px);
+  left: calc(round(down, 50%, 1px) - 138px);
+}
+.passport-ribbon-cap:nth-of-type(2) {
+  left: calc(50% + 128px);
+  left: calc(round(down, 50%, 1px) + 128px);
+}
+/* The ribbon: a primary band, outlined, with stepped round corners, and darker tails folded
+   behind it, each with a stepped swallowtail. Cream on primary is fine at 16px Press Start 2P
+   (SPEC §16.3). */
+.passport-ribbon {
+  position: absolute;
+  top: calc(-19px - var(--gap));
+  left: calc(50% - 106px);
+  left: calc(round(down, 50%, 1px) - 106px);
+}
+.passport-ribbon span {
+  position: relative;
+  z-index: 1;
+  display: block;
+  padding: 8px 18px;
+  background: var(--primary);
+  clip-path: var(--px-sm);
+  color: var(--on-primary);
+  font-family: var(--font-press-start);
+  font-size: var(--text-h3);
+  line-height: 1;
+  white-space: nowrap;
+}
+.passport-ribbon span::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--text);
+  clip-path: var(--px-sm-ring);
+}
+.passport-ribbon::before,
+.passport-ribbon::after {
+  content: "";
+  position: absolute;
+  top: 6px;
+  width: 28px;
+  height: 32px;
+  background: var(--leather-shade);
+  clip-path: polygon(
+    2px 0,
+    100% 0,
+    100% 100%,
+    2px 100%,
+    2px calc(100% - 2px),
+    0 calc(100% - 2px),
+    0 24px,
+    4px 24px,
+    4px 20px,
+    8px 20px,
+    8px 12px,
+    4px 12px,
+    4px 8px,
+    0 8px,
+    0 2px,
+    2px 2px
+  );
+}
+.passport-ribbon::before {
+  left: -16px;
+}
+.passport-ribbon::after {
+  right: -16px;
+  scale: -1 1;
+}
+.passport-subtitle {
+  font-size: var(--text-body);
+  line-height: 1;
+  letter-spacing: 2px;
+  text-transform: uppercase;
 }
 
-/* The stamp sprite in the left page's corner, under the text (1×, 2× from md). */
-.passport-stamp {
-  position: absolute;
-  right: var(--s);
-  bottom: var(--s);
-  width: 66px;
-  height: 48px;
+/* The numbers, in a framed panel: a row each, icon, label, and value, ruled between. The rows
+   share the page's height left over by the heading, the panel's frame, and the footer
+   (--fixed), in whole pixels (the first pin's link may take 44px); any rest goes below them. */
+.passport-rows {
+  display: grid;
+  grid-auto-rows: minmax(40px, auto);
+  grid-auto-rows: minmax(
+    round(
+      down,
+      (100cqh - var(--bt) - var(--b) - 2 * var(--bw) - 4 * var(--gap) - 39px - var(--footer) - 12px) / 8,
+      1px
+    ),
+    auto
+  );
+  margin-top: var(--gap);
+  padding: 4px 10px;
 }
-@media (min-width: 48rem) {
-  .passport-stamp {
-    width: 132px;
-    height: 96px;
+.passport-row {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.passport-row + .passport-row {
+  border-top: 2px solid var(--surface-dark);
+}
+.passport-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  margin-right: 12px;
+}
+.passport-icon svg {
+  width: 24px;
+  height: 24px;
+}
+.passport-icon img {
+  width: 32px;
+  height: 32px;
+}
+.passport-row-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.passport-value {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.passport-number {
+  font-family: var(--font-press-start);
+  font-size: var(--text-h3);
+  line-height: 1.25;
+}
+.passport-text {
+  font-size: var(--text-body);
+  line-height: 1;
+}
+
+/* The countries bar: slim, lit in accent by the share of the 195. */
+.passport-bar {
+  flex: 1;
+  max-width: 120px;
+  height: 10px;
+  border: 2px solid var(--text);
+  background: var(--background);
+}
+.passport-bar span {
+  display: block;
+  height: 100%;
+  width: calc(var(--share) * 100%);
+  width: round(up, var(--share) * 100%, 2px);
+  background: var(--accent);
+}
+
+/* Continent stamps: small notched boxes, inked (accent, dark text) once visited, a faint
+   outline otherwise. */
+.passport-stamps {
+  display: flex;
+  gap: 4px;
+}
+.passport-stamps li {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 20px;
+  border: 2px solid var(--surface-dark);
+  font-size: var(--text-tiny);
+  line-height: 1;
+  clip-path: polygon(
+    2px 0,
+    calc(100% - 2px) 0,
+    100% 2px,
+    100% calc(100% - 2px),
+    calc(100% - 2px) 100%,
+    2px 100%,
+    0 calc(100% - 2px),
+    0 2px
+  );
+}
+.passport-stamps [data-visited] {
+  border-color: var(--text);
+  background: var(--accent);
+}
+
+/* The first pin's row is a link to its place. */
+.passport-row-link {
+  display: flex;
+  align-items: center;
+  width: calc(100% + 8px);
+  min-width: 0;
+  min-height: 44px;
+  margin: 0 -4px;
+  padding: 0 4px;
+}
+@media (hover: hover) {
+  .passport-row-link:hover {
+    background: var(--background);
   }
 }
 
-/* Sparkle sprites around the spread, at (--x, --y) sprite pixels from its corner. Once the
-   spread is open each twinkles on and off in steps, on its own beat. */
+/* At the page's bottom, a gap below the panel at least, left-aligned with the rows. */
+.passport-footer {
+  min-height: var(--footer);
+  margin-top: auto;
+  padding-top: var(--gap);
+  box-sizing: content-box;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--text-tiny);
+  line-height: 1;
+}
+
+/* ---- Roomy pages (side by side, from 380px wide) ---- */
+
+@container page (min-width: 380px) {
+  .passport-band {
+    gap: 12px;
+    padding: 4px 12px;
+  }
+  .passport-globe {
+    width: 48px;
+    height: 48px;
+  }
+  .passport-holder {
+    gap: 16px;
+    padding: 10px;
+  }
+  .passport-print {
+    min-height: 108px;
+    margin-top: 8px;
+  }
+  .passport-entry-list {
+    --cluster: 108px;
+  }
+  .passport-mrz-strip {
+    padding-block: 8px;
+  }
+  .passport-photo span {
+    width: 80px;
+    height: 100px;
+  }
+  .passport-codes {
+    gap: 16px;
+  }
+  .passport-fields {
+    gap: 6px;
+  }
+  .passport-field[data-fit="roomy"] {
+    font-family: var(--font-press-start);
+    font-size: var(--text-h3);
+    line-height: 1.25;
+  }
+  .passport-trail {
+    --w: 208px;
+    --h: 92px;
+    --x: -86px;
+    --y: -14px;
+  }
+  /* Two rows of three, the second staggered by half a stamp, the cluster (284px) centered;
+     row-mates share 4px of outline, never a neighbour's text. */
+  .passport-entry {
+    --x0: calc(50% - 142px);
+    --x0: round(down, 50% - 142px, 1px);
+    flex-direction: column;
+    gap: 4px;
+    width: 84px;
+    height: 52px;
+    right: auto;
+  }
+  .passport-entry:nth-child(n) {
+    display: flex;
+  }
+  .passport-entry:nth-child(1) {
+    left: var(--x0);
+    top: 2px;
+  }
+  .passport-entry:nth-child(2) {
+    left: calc(var(--x0) + 80px);
+    top: 6px;
+  }
+  .passport-entry:nth-child(3) {
+    left: calc(var(--x0) + 160px);
+    top: 0;
+  }
+  .passport-entry:nth-child(4) {
+    left: calc(var(--x0) + 40px);
+    top: 54px;
+  }
+  .passport-entry:nth-child(5) {
+    left: calc(var(--x0) + 120px);
+    top: 56px;
+  }
+  .passport-entry:nth-child(6) {
+    left: calc(var(--x0) + 200px);
+    top: 52px;
+  }
+  .passport-compass {
+    display: block;
+  }
+  .passport-icon {
+    margin-right: 16px;
+  }
+}
+
+/* ---- Page arrows (one page at a time) ---- */
+
+.passport-turn {
+  position: absolute;
+  top: calc(var(--row) + var(--book-h) + 12px);
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+}
+.passport-page-no {
+  border: 4px solid var(--text);
+  padding: 4px 12px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--text-body);
+  line-height: 1;
+}
+
+/* ---- Sparkles ---- */
+
+/* Sparkle sprites around the book, at (--x, --y) of its size plus (--dx, --dy) sparkle pixels.
+   Once it's open each twinkles on and off in steps, on its own beat. */
 .passport-sparkle {
   position: absolute;
-  left: calc(var(--x) * var(--s));
-  top: calc(var(--y) * var(--s));
+  left: calc(var(--x) * var(--book-w) + var(--dx) * var(--sparkle));
+  left: round(down, var(--x) * var(--book-w) + var(--dx) * var(--sparkle), 1px);
+  top: calc(var(--y) * var(--book-h) + var(--dy) * var(--sparkle));
+  top: round(down, var(--y) * var(--book-h) + var(--dy) * var(--sparkle), 1px);
   pointer-events: none;
   animation: passport-twinkle 1.2s steps(1) calc(var(--open-at) + var(--open-for) + var(--beat)) infinite backwards;
 }
@@ -210,13 +1399,17 @@
   }
 }
 
-/* No turn, no slide, no shine, no twinkle: the third activation shows the open spread. */
+/* No turn, no slide, no shine, no twinkle, no page flip: the third activation shows the open
+   book, and the arrows switch pages at once. */
 @media (prefers-reduced-motion: reduce) {
   .passport-book,
-  .passport-right,
+  .passport-back,
   .passport-cover,
   .passport-shine::before,
   .passport-sparkle {
     animation: none;
+  }
+  [data-layout="single"] .passport-first {
+    transition: none;
   }
 }

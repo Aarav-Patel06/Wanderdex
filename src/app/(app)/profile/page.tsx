@@ -9,6 +9,6 @@ export const metadata: Metadata = { title: "Profile · Wanderdex" };
 
 // Profile (SPEC §14.6): computed on the server from the user's own rows.
 export default async function ProfilePage() {
-  const [{ username, joined }, rows] = await Promise.all([currentProfile(), loadStatsVisits()]);
-  return <ProfileView username={username} joined={joined} stats={profileStats(rows)} />;
+  const [owner, rows] = await Promise.all([currentProfile(), loadStatsVisits()]);
+  return <ProfileView owner={owner} stats={profileStats(rows)} />;
 }

@@ -18,5 +18,5 @@ export const currentProfile = cache(async () => {
     .eq("user_id", data.claims.sub)
     .maybeSingle<{ username: string; created_at: string }>();
 
-  return { username: profile?.username ?? "", joined: profile?.created_at ?? null };
+  return { userId: data.claims.sub, username: profile?.username ?? "", joined: profile?.created_at ?? null };
 });

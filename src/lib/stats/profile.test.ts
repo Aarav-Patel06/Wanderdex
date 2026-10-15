@@ -9,7 +9,13 @@ let next = 0;
 function visit(
   place: string,
   code: string | null,
-  { at = 1, logged = at, category = "food" }: { at?: number; logged?: number; category?: Category } = {},
+  {
+    at = 1,
+    logged = at,
+    category = "food",
+    rating = null,
+    city = `City ${place}`,
+  }: { at?: number; logged?: number; category?: Category; rating?: number | null; city?: string | null } = {},
 ): StatsVisit {
   next += 1;
   return {
@@ -20,7 +26,8 @@ function visit(
     visited_precision: "date",
     timezone: "UTC",
     created_at: day(logged),
-    places: { name: `Place ${place}`, city: `City ${place}`, country: code && `Country ${code}`, country_code: code },
+    rating,
+    places: { name: `Place ${place}`, city, country: code && `Country ${code}`, country_code: code },
   };
 }
 
@@ -32,10 +39,13 @@ describe("profileStats", () => {
   it("gives zeros and no first visit without visits", () => {
     expect(profileStats([])).toEqual({
       places: 0,
+      cities: 0,
       countries: 0,
-      continents: 0,
+      countryFirsts: [],
+      continents: [],
       visits: 0,
       first: null,
+      topRated: null,
       categories: [],
       revisited: [],
     });
@@ -50,7 +60,7 @@ describe("profileStats", () => {
   it("counts territories toward their sovereign, and continents where they lie", () => {
     const stats = profileStats([visit("a", "FR"), visit("b", "GF"), visit("c", "RE"), visit("d", "HK")]);
     expect(stats.countries).toBe(2); // FR, CN
-    expect(stats.continents).toBe(4); // Europe, South America, Africa, Asia
+    expect(stats.continents).toEqual(["Africa", "Asia", "Europe", "South America"]);
   });
 
   it("counts disputed places as themselves", () => {
@@ -61,14 +71,14 @@ describe("profileStats", () => {
   it("counts Antarctica's continent but no country, and nothing for a missing code", () => {
     const stats = profileStats([visit("a", "AQ"), visit("b", null)]);
     expect(stats.countries).toBe(0);
-    expect(stats.continents).toBe(1);
+    expect(stats.continents).toEqual(["Antarctica"]);
     expect(stats.places).toBe(2);
   });
 
   it("counts a transcontinental country once, on its geoscheme continent", () => {
     const stats = profileStats([visit("a", "RU"), visit("b", "TR")]);
     expect(stats.countries).toBe(2);
-    expect(stats.continents).toBe(2); // Europe, Asia
+    expect(stats.continents).toEqual(["Asia", "Europe"]);
   });
 
   it("finds the earliest visit, by visited date then by when it was logged", () => {
@@ -120,5 +130,44 @@ describe("profileStats", () => {
 
   it("lists no revisited places when every place has one visit", () => {
     expect(profileStats([visit("a", "JP"), visit("b", "JP")]).revisited).toEqual([]);
+  });
+
+  it("counts distinct cities by name within a country, skipping places without one", () => {
+    const rows = [
+      visit("a", "JP", { city: "Tokyo" }),
+      visit("b", "JP", { city: "Tokyo" }),
+      visit("c", "US", { city: "Portland" }),
+      visit("d", "AU", { city: "Portland" }),
+      visit("e", "FR", { city: null }),
+    ];
+    expect(profileStats(rows).cities).toBe(3);
+  });
+
+  it("finds the highest rated visit's place, ties by the most recent visit", () => {
+    const rows = [
+      visit("a", "JP", { at: 1, rating: 9 }),
+      visit("b", "JP", { at: 2, rating: 10 }),
+      visit("c", "JP", { at: 5, rating: 10, category: "cafe" }),
+      visit("d", "JP", { at: 9 }),
+    ];
+    expect(profileStats(rows).topRated).toEqual({
+      place: { id: "c", name: "Place c", city: "City c", country: "Country JP", category: "cafe" },
+      rating: 10,
+    });
+    expect(profileStats([visit("a", "JP")]).topRated).toBeNull();
+  });
+
+  it("lists each country's first visit in time order, territories under their sovereign", () => {
+    const rows = [
+      visit("a", "FR", { at: 9 }),
+      visit("b", "JP", { at: 4, logged: 6 }),
+      visit("c", "JP", { at: 4, logged: 5 }),
+      visit("d", "GF", { at: 2 }), // French Guiana counts toward France
+      visit("e", "AQ", { at: 1 }), // Antarctica counts toward no country
+    ];
+    expect(profileStats(rows).countryFirsts).toEqual([
+      { code: "FR", visitedAt: day(2), precision: "date", timezone: "UTC" },
+      { code: "JP", visitedAt: day(4), precision: "date", timezone: "UTC" },
+    ]);
   });
 });

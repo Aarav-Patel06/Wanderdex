@@ -7,7 +7,7 @@ import { UserInitial } from "@/components/shell/avatar";
 import { formatVisited } from "@/lib/dates";
 import { CONTINENTS } from "@/lib/stats/continents";
 import { STATE_COUNT } from "@/lib/stats/countries";
-import { passportData } from "@/lib/stats/passport";
+import { type PassportOwner, passportData } from "@/lib/stats/passport";
 import type { ProfileStats } from "@/lib/stats/profile";
 
 // Its rows and panels are My Visits' (visit-link, visits-panel).
@@ -15,15 +15,8 @@ import "@/app/(app)/visits/visits.css";
 import "@/components/profile/profile.css";
 
 // Profile (SPEC §14.6): who the user is, their stats and travel stats, and their account.
-export function ProfileView({
-  username,
-  joined,
-  stats,
-}: {
-  username: string;
-  joined: string | null;
-  stats: ProfileStats;
-}) {
+export function ProfileView({ owner, stats }: { owner: PassportOwner; stats: ProfileStats }) {
+  const { username, joined } = owner;
   const { first } = stats;
 
   return (
@@ -37,7 +30,7 @@ export function ProfileView({
           {/* profiles.created_at, in UTC: the server doesn't know the user's zone. */}
           {joined && <p className="text-small">Joined {formatInTimeZone(joined, "UTC", "MMMM yyyy")}</p>}
         </div>
-        <ProfilePassport data={passportData(stats)} />
+        <ProfilePassport data={passportData(stats, owner)} />
       </header>
 
       <section aria-labelledby="stats-title" className="flex flex-col gap-4">
@@ -45,7 +38,7 @@ export function ProfileView({
         <div className="grid grid-cols-2 gap-4">
           <StatTile label="Places discovered" value={stats.places} />
           <StatTile label="Countries" value={`${stats.countries}/${STATE_COUNT}`} />
-          <StatTile label="Continents" value={`${stats.continents}/${CONTINENTS.length}`} />
+          <StatTile label="Continents" value={`${stats.continents.length}/${CONTINENTS.length}`} />
           <StatTile label="Total visits" value={stats.visits} />
           {first ? (
             <FirstVisit place={first.place} date={formatVisited(first.visitedAt, first.precision, first.timezone)} />

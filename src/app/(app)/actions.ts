@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 
 import { changePasswordSchema } from "@/lib/auth";
+import { currentProfile } from "@/lib/profile";
 import { loadStatsVisits } from "@/lib/stats/load";
 import { type PassportData, passportData } from "@/lib/stats/passport";
 import { profileStats } from "@/lib/stats/profile";
@@ -15,10 +16,11 @@ export async function logout() {
   redirect("/login");
 }
 
-// The passport secret's numbers (SPEC §15.1), for the sidebar's trigger: the profile's stats,
-// computed the same way under the user's session.
+// The passport secret's contents (SPEC §15.1), for the sidebar's trigger: the profile's owner and
+// stats, read and computed the same way under the user's session.
 export async function loadPassport(): Promise<PassportData> {
-  return passportData(profileStats(await loadStatsVisits()));
+  const [owner, rows] = await Promise.all([currentProfile(), loadStatsVisits()]);
+  return passportData(profileStats(rows), owner);
 }
 
 export interface PasswordFormState {
